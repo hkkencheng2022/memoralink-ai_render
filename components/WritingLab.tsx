@@ -1,6 +1,8 @@
+
+// Import React to fix namespace errors
 import React, { useState, useEffect } from 'react';
 import { analyzeWriting } from '../services/geminiService';
-import { Loader2, CheckCircle2, ArrowRight, PenTool, BookOpen, Bookmark, Check, Volume2, Save } from 'lucide-react';
+import { Loader2, CheckCircle2, ArrowRight, PenTool, BookOpen, Bookmark, Check, Volume2, Save, AlertCircle } from 'lucide-react';
 import { AiProvider, VocabularyItem, WritingEntry } from '../types';
 
 interface WritingLabProps {
@@ -17,10 +19,10 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
     keyVocabulary?: VocabularyItem[]
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
   const [isAnalysisSaved, setIsAnalysisSaved] = useState(false);
 
-  // Load saved status on mount
   useEffect(() => {
     const saved = localStorage.getItem('memoralink_library');
     if (saved) {
@@ -33,12 +35,14 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
     if (!text.trim()) return;
     setLoading(true);
     setResult(null);
+    setError(null);
     setIsAnalysisSaved(false);
     try {
       const analysis = await analyzeWriting(text, context, aiProvider);
       setResult(analysis);
-    } catch (e) {
-      alert("Analysis failed. Please check your API configuration.");
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message || "Analysis failed. Please check your API key and internet connection.");
     } finally {
       setLoading(false);
     }
@@ -97,7 +101,6 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-        {/* Input Section */}
         <div className="space-y-4 flex flex-col h-full">
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
             <label className="block text-sm font-medium text-slate-700 mb-2">Context</label>
@@ -130,12 +133,20 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
           </div>
         </div>
 
-        {/* Output Section */}
         <div className="space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+              <div className="text-sm text-red-700">
+                <p className="font-bold">Analysis Error</p>
+                <p>{error}</p>
+                <p className="mt-2 text-xs opacity-80">Make sure your Gemini API key (API_KEY) is correctly set in your environment variables.</p>
+              </div>
+            </div>
+          )}
+
           {result ? (
             <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
-              
-              {/* Action Header */}
               <div className="flex items-center justify-between">
                  <h3 className="text-lg font-bold text-slate-800">Results</h3>
                  <button
@@ -155,7 +166,6 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
                  </button>
               </div>
 
-              {/* Correction */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-emerald-500 border-slate-200">
                 <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wide mb-2 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" /> Grammar Check
@@ -163,7 +173,6 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
                 <p className="text-slate-800 text-lg leading-relaxed">{result.correction}</p>
               </div>
 
-              {/* Improvements */}
               <div className="bg-gradient-to-br from-indigo-50 to-white p-5 rounded-xl shadow-sm border border-l-4 border-l-indigo-500 border-slate-200">
                  <h3 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-2 flex items-center gap-2">
                   <ArrowRight className="w-4 h-4" /> Native Speaker Version
@@ -171,7 +180,6 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
                 <p className="text-slate-800 italic leading-relaxed">"{result.improvedVersion}"</p>
               </div>
 
-              {/* Suggested Vocabulary */}
               {result.keyVocabulary && result.keyVocabulary.length > 0 && (
                 <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                   <h3 className="text-sm font-bold text-amber-600 uppercase tracking-wide mb-3 flex items-center gap-2">
@@ -214,7 +222,6 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
                 </div>
               )}
 
-              {/* Explanation */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                  <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">Feedback Notes</h3>
                  <div className="prose prose-sm text-slate-600">
@@ -222,7 +229,7 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
                  </div>
               </div>
             </div>
-          ) : (
+          ) : !loading && !error && (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-slate-100/50 rounded-xl border border-dashed border-slate-300 p-8">
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                 <PenTool className="w-8 h-8 opacity-20" />

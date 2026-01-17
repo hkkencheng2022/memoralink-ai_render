@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { createChatSession, ChatSession } from '../services/geminiService';
 import { Mic, MicOff, Send, Sparkles, ArrowRight } from 'lucide-react';
@@ -40,12 +41,9 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Use the new generic ChatSession interface instead of GoogleGenAI specific class
   const chatSessionRef = useRef<ChatSession | null>(null);
 
-  // Initialize Chat Session when scenario or provider changes
   useEffect(() => {
-    // If custom scenario is selected but not started, do not initialize chat
     if (activeScenario.id === 'custom' && !customSessionStarted) {
       return;
     }
@@ -69,7 +67,6 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
     }]);
   }, [activeScenario, aiProvider, customSessionStarted]); 
 
-  // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -83,7 +80,6 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
     setIsLoading(true);
 
     try {
-      // Use generic sendMessage method
       const responseText = await chatSessionRef.current.sendMessage(userMsg.text);
       
       const modelMsg: Message = { 
@@ -128,7 +124,7 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
 
   const handleStartCustom = () => {
     if (!customTopic.trim()) return;
-    setMessages([]); // Clear previous messages
+    setMessages([]);
     setCustomSessionStarted(true);
   };
 
@@ -136,11 +132,11 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
     const selected = SCENARIOS.find(s => s.id === e.target.value);
     if (selected) {
       setActiveScenario(selected);
-      setMessages([]); // Clear messages
+      setMessages([]);
       if (selected.id === 'custom') {
-        setCustomSessionStarted(false); // Reset custom state
+        setCustomSessionStarted(false);
       } else {
-        setCustomSessionStarted(false); // Ensure this is false for standard scenarios
+        setCustomSessionStarted(false);
       }
     }
   };
@@ -148,39 +144,39 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
   const showCustomSetup = activeScenario.id === 'custom' && !customSessionStarted;
 
   return (
-    <div className="max-w-4xl mx-auto md:p-8 h-[calc(100vh-80px)] md:h-screen flex flex-col space-y-4">
+    <div className="max-w-4xl mx-auto md:p-8 h-[calc(100vh-80px)] md:h-screen flex flex-col space-y-4 bg-slate-900 rounded-none md:rounded-3xl">
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-4 md:p-0">
         <div>
-           <h2 className="text-2xl font-bold text-slate-900">Oral Coach</h2>
-           <p className="text-slate-600 text-sm">Roleplay scenarios to prepare for exams.</p>
+           <h2 className="text-2xl font-bold text-white">Oral Coach</h2>
+           <p className="text-slate-300 text-sm">Roleplay scenarios to prepare for exams.</p>
         </div>
         <select 
           value={activeScenario.id}
           onChange={handleScenarioChange}
-          className="p-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 min-w-[200px]"
+          className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 min-w-[200px]"
         >
           {SCENARIOS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
         </select>
        </div>
 
-       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+       <div className="flex-1 bg-slate-800 rounded-2xl shadow-xl border border-slate-700 overflow-hidden flex flex-col">
           
           {showCustomSetup ? (
-             <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-6 bg-slate-50">
-               <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mb-2">
-                 <Sparkles className="w-8 h-8 text-indigo-600" />
+             <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-6 bg-slate-800">
+               <div className="w-16 h-16 bg-indigo-900 rounded-full flex items-center justify-center mb-2">
+                 <Sparkles className="w-8 h-8 text-indigo-300" />
                </div>
                <div className="text-center max-w-md space-y-2">
-                 <h3 className="text-xl font-bold text-slate-900">Create Custom Scenario</h3>
-                 <p className="text-slate-600">Describe who the AI should be and what you want to practice.</p>
+                 <h3 className="text-xl font-bold text-white">Create Custom Scenario</h3>
+                 <p className="text-slate-300">Describe who the AI should be and what you want to practice.</p>
                </div>
                
                <div className="w-full max-w-md space-y-4">
                  <textarea 
                    value={customTopic}
                    onChange={(e) => setCustomTopic(e.target.value)}
-                   placeholder="e.g. You are a strict immigration officer at the airport. I am a tourist arriving for a 2-week holiday..."
-                   className="w-full p-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-32"
+                   placeholder="e.g. You are a strict immigration officer..."
+                   className="w-full p-4 rounded-xl border border-slate-600 bg-slate-900 text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-32"
                  />
                  <button 
                    onClick={handleStartCustom}
@@ -194,14 +190,14 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
           ) : (
             <>
               {/* Chat Area */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/40">
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div 
                       className={`max-w-[80%] p-4 rounded-2xl text-sm md:text-base leading-relaxed ${
                         msg.role === 'user' 
                           ? 'bg-indigo-600 text-white rounded-tr-none shadow-md' 
-                          : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none shadow-sm'
+                          : 'bg-slate-700 text-white border border-slate-600 rounded-tl-none shadow-sm'
                       }`}
                     >
                       {msg.text}
@@ -210,10 +206,10 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
                 ))}
                 {isLoading && (
                    <div className="flex justify-start">
-                     <div className="bg-slate-100 px-4 py-2 rounded-full flex items-center gap-2">
-                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" />
-                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-75" />
-                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-150" />
+                     <div className="bg-slate-700 px-4 py-2 rounded-full flex items-center gap-2">
+                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" />
+                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-75" />
+                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-150" />
                      </div>
                    </div>
                 )}
@@ -221,12 +217,12 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
               </div>
 
               {/* Input Area */}
-              <div className="p-4 bg-white border-t border-slate-200">
+              <div className="p-4 bg-slate-800 border-t border-slate-700">
                  <div className="flex items-center gap-2">
                    <button 
                       onClick={toggleMic}
                       className={`p-3 rounded-full transition-all duration-200 ${
-                        isListening ? 'bg-red-50 text-red-600 animate-pulse ring-2 ring-red-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        isListening ? 'bg-red-900 text-red-100 animate-pulse ring-2 ring-red-500' : 'bg-slate-700 text-slate-100 hover:bg-slate-600'
                       }`}
                       title="Speak"
                    >
@@ -240,7 +236,7 @@ export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                         placeholder={isListening ? "Listening..." : "Type your response..."}
-                        className="w-full p-3 pl-4 pr-10 rounded-full border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        className="w-full p-3 pl-4 pr-10 rounded-full border border-slate-600 bg-slate-900 text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none"
                      />
                    </div>
 
