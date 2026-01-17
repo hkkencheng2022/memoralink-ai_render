@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { VocabularyItem, WritingEntry } from '../types';
-import { Trash2, Eye, EyeOff, BookOpen, Search, Volume2, Download, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, Eye, EyeOff, BookOpen, Search, Volume2, Download, FileText, ChevronDown, ChevronUp, Upload, FileJson, RefreshCw } from 'lucide-react';
 
 type LibraryTab = 'vocabulary' | 'writing';
 
@@ -16,7 +17,14 @@ export const Library: React.FC = () => {
   const [writingItems, setWritingItems] = useState<WritingEntry[]>([]);
   const [expandedWriting, setExpandedWriting] = useState<Set<string>>(new Set());
 
+  // File Input Ref for Import
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = () => {
     const savedVocab = localStorage.getItem('memoralink_library');
     if (savedVocab) {
       setItems(JSON.parse(savedVocab));
@@ -26,7 +34,95 @@ export const Library: React.FC = () => {
     if (savedWriting) {
       setWritingItems(JSON.parse(savedWriting));
     }
-  }, [activeTab]); // Refresh when tab changes
+  };
+
+  // --- Data Management Logic (Backup/Restore) ---
+
+  const handleBackupData = () => {
+    const backupData = {
+      version: 1,
+      date: new Date().toISOString(),
+      vocabulary: items,
+      writingLogs: writingItems
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `memoralink_backup_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleRestoreClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!confirm("Warning: Restoring data will MERGE imported data with your current library. Duplicates based on IDs or words will be handled. Continue?")) {
+      event.target.value = ''; // Reset input
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+
+        // Validate basic structure
+        if (!data.vocabulary && !data.writingLogs) {
+          throw new Error("Invalid backup file format");
+        }
+
+        // Merge Vocabulary
+        if (Array.isArray(data.vocabulary)) {
+          const currentVocab = JSON.parse(localStorage.getItem('memoralink_library') || '[]');
+          const wordSet = new Set(currentVocab.map((v: VocabularyItem) => v.word));
+          const newVocab = [...currentVocab];
+          
+          data.vocabulary.forEach((item: VocabularyItem) => {
+            if (!wordSet.has(item.word)) {
+              newVocab.push(item);
+              wordSet.add(item.word);
+            }
+          });
+          
+          localStorage.setItem('memoralink_library', JSON.stringify(newVocab));
+        }
+
+        // Merge Writing Logs
+        if (Array.isArray(data.writingLogs)) {
+          const currentLogs = JSON.parse(localStorage.getItem('memoralink_writing_library') || '[]');
+          const idSet = new Set(currentLogs.map((l: WritingEntry) => l.id));
+          const newLogs = [...currentLogs];
+
+          data.writingLogs.forEach((item: WritingEntry) => {
+            if (!idSet.has(item.id)) {
+              newLogs.push(item);
+              idSet.add(item.id);
+            }
+          });
+
+          localStorage.setItem('memoralink_writing_library', JSON.stringify(newLogs));
+        }
+
+        // Refresh State
+        loadData();
+        alert("Data restored successfully!");
+      } catch (error) {
+        console.error(error);
+        alert("Failed to restore data. Please ensure the file is a valid MemoraLink JSON backup.");
+      } finally {
+        if (event.target) event.target.value = ''; // Reset input
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // --- Vocabulary Logic ---
 
@@ -127,7 +223,15 @@ export const Library: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 pb-24 md:pb-8">
-      
+      {/* Hidden File Input for Restore */}
+      <input 
+        type="file" 
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".json"
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="flex flex-col gap-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -136,18 +240,35 @@ export const Library: React.FC = () => {
             <p className="text-slate-600">Review your learning history.</p>
           </div>
           
-          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-              {activeTab === 'vocabulary' && (
+          <div className="flex flex-col w-full md:w-auto gap-3">
+             {/* Data Management Toolbar */}
+             <div className="flex flex-wrap items-center gap-2">
                 <button 
-                  onClick={handleExportAnki}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-sm font-medium"
-                  title="Export as CSV for Anki"
+                  onClick={handleBackupData}
+                  className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-xs font-bold border border-indigo-200"
+                  title="Download a JSON backup of all your data"
                 >
-                  <Download className="w-4 h-4" /> Export to Anki
+                  <FileJson className="w-4 h-4" /> Backup Data
                 </button>
-              )}
-              
-              <div className="relative w-full md:w-64">
+                <button 
+                  onClick={handleRestoreClick}
+                  className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-xs font-bold border border-indigo-200"
+                  title="Import a previously saved backup file"
+                >
+                  <Upload className="w-4 h-4" /> Restore Data
+                </button>
+                {activeTab === 'vocabulary' && (
+                  <button 
+                    onClick={handleExportAnki}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-xs font-bold border border-slate-200"
+                    title="Export current view as CSV for Anki"
+                  >
+                    <Download className="w-4 h-4" /> Export Anki
+                  </button>
+                )}
+             </div>
+
+             <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                 <input 
                   type="text" 
