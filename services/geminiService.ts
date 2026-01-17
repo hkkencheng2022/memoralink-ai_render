@@ -5,8 +5,11 @@ import { VocabularyItem, AiProvider } from "../types";
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 // Helper to get the correct API key from process.env
+// Prioritizes the specific provider's key, falls back to the main API_KEY
 const getApiKey = (provider: AiProvider) => {
-  if (provider === 'deepseek') return process.env.DEEPSEEK_API_KEY;
+  if (provider === 'deepseek') {
+    return process.env.DEEPSEEK_API_KEY || process.env.API_KEY;
+  }
   return process.env.API_KEY;
 };
 
@@ -15,6 +18,7 @@ export const generateVocabulary = async (
   count: number = 3, 
   difficulty: string = 'Intermediate'
 ): Promise<VocabularyItem[]> => {
+  // Vocabulary generation requires structured output, best handled by Gemini
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: MODEL_NAME,
@@ -48,9 +52,9 @@ export const generateVocabulary = async (
 
 export const generateVocabularyFromList = async (
   words: string[],
-  _provider: AiProvider
+  provider: AiProvider
 ): Promise<VocabularyItem[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: getApiKey(provider) });
   const response = await ai.models.generateContent({
     model: MODEL_NAME,
     contents: `Create memory aid cards for: ${words.join(', ')}. Focus on absurd mnemonics for poor memory.`,
@@ -82,9 +86,9 @@ export const generateVocabularyFromList = async (
 export const analyzeWriting = async (
   text: string, 
   context: string,
-  _provider: AiProvider
+  provider: AiProvider
 ): Promise<any> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: getApiKey(provider) });
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: `Context: ${context}. Text: "${text}". 
@@ -122,8 +126,8 @@ export interface ChatSession {
   sendMessage: (msg: string) => Promise<string>;
 }
 
-export const createChatSession = (_provider: AiProvider, systemInstruction: string): ChatSession => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+export const createChatSession = (provider: AiProvider, systemInstruction: string): ChatSession => {
+  const ai = new GoogleGenAI({ apiKey: getApiKey(provider) });
   const chat = ai.chats.create({
     model: MODEL_NAME,
     config: {
