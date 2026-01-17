@@ -5,7 +5,6 @@ import { VocabularyItem, AiProvider } from "../types";
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 // Helper to get the correct API key from process.env
-// Prioritizes the specific provider's key, falls back to the main API_KEY
 const getApiKey = (provider: AiProvider) => {
   if (provider === 'deepseek') {
     return process.env.DEEPSEEK_API_KEY || process.env.API_KEY;
@@ -13,18 +12,29 @@ const getApiKey = (provider: AiProvider) => {
   return process.env.API_KEY;
 };
 
+// Robust JSON extraction helper
+const extractJson = (text: string) => {
+  try {
+    // Remove markdown code blocks if present
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanText);
+  } catch (e) {
+    console.error("JSON Parse Error:", e, "Original text:", text);
+    throw new Error("Failed to parse AI response as JSON");
+  }
+};
+
 export const generateVocabulary = async (
   topic: string, 
   count: number = 3, 
   difficulty: string = 'Intermediate'
 ): Promise<VocabularyItem[]> => {
-  // Vocabulary generation requires structured output, best handled by Gemini
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: MODEL_NAME,
     contents: `Topic: ${topic}. Difficulty: ${difficulty}. 
     The user has very poor memory. Provide ${count} words with unique, vivid, and funny stories (mnemonics) to help them remember.
-    Include Chinese translations and phonetics.`,
+    Include Chinese translations and phonetics. Return ONLY valid JSON.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -46,8 +56,7 @@ export const generateVocabulary = async (
     }
   });
   
-  const text = response.text || "[]";
-  return JSON.parse(text.trim());
+  return extractJson(response.text || "[]");
 };
 
 export const generateVocabularyFromList = async (
@@ -57,7 +66,7 @@ export const generateVocabularyFromList = async (
   const ai = new GoogleGenAI({ apiKey: getApiKey(provider) });
   const response = await ai.models.generateContent({
     model: MODEL_NAME,
-    contents: `Create memory aid cards for: ${words.join(', ')}. Focus on absurd mnemonics for poor memory.`,
+    contents: `Create memory aid cards for: ${words.join(', ')}. Focus on absurd mnemonics for poor memory. Return ONLY valid JSON.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -79,8 +88,7 @@ export const generateVocabularyFromList = async (
     }
   });
   
-  const text = response.text || "[]";
-  return JSON.parse(text.trim());
+  return extractJson(response.text || "[]");
 };
 
 export const analyzeWriting = async (
@@ -91,8 +99,9 @@ export const analyzeWriting = async (
   const ai = new GoogleGenAI({ apiKey: getApiKey(provider) });
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `Context: ${context}. Text: "${text}". 
-    Correct grammar, suggest a more native version, and provide vocabulary with mnemonics.`,
+    contents: `Context: ${context}. Text to analyze: "${text}". 
+    Task: 1. Correct grammar. 2. Suggest a native version. 3. Provide 2-3 key vocabulary words used or related with mnemonics.
+    IMPORTANT: Return the response strictly as a JSON object.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -109,7 +118,9 @@ export const analyzeWriting = async (
                 word: { type: Type.STRING },
                 definition: { type: Type.STRING },
                 mnemonic: { type: Type.STRING },
-                phonetic: { type: Type.STRING }
+                phonetic: { type: Type.STRING },
+                chineseTranslation: { type: Type.STRING },
+                exampleSentence: { type: Type.STRING }
               }
             }
           }
@@ -118,8 +129,7 @@ export const analyzeWriting = async (
       }
     }
   });
-  const resText = response.text || "{}";
-  return JSON.parse(resText.trim());
+  return extractJson(response.text || "{}");
 };
 
 export interface ChatSession {
