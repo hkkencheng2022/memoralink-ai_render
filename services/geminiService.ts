@@ -1,22 +1,34 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { VocabularyItem, AiProvider } from "../types";
+import { VocabularyItem, AiProvider, ChatMessage } from "../types";
 
-// Initialize Gemini Client
-// Ensure we don't crash if env var is missing during dev boot
-const apiKey = process.env.API_KEY || 'MISSING_KEY'; 
-const geminiAi = new GoogleGenAI({ apiKey: apiKey });
+// --- Configuration & Helpers ---
+
 const GEMINI_MODEL = "gemini-3-flash-preview";
-
-// DeepSeek Configuration
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = "deepseek-chat";
 
-// --- Helpers for DeepSeek ---
+export interface ChatSession {
+  sendMessage: (message: string) => Promise<string>;
+}
 
+/**
+ * Retrieves the API Key for Gemini.
+ * Checks build-time env vars first, then runtime window injection (Streamlit).
+ */
+const getGeminiClient = () => {
+  // @ts-ignore
+  const key = process.env.API_KEY || (typeof window !== 'undefined' ? window.API_KEY : '');
+  if (!key) {
+    console.warn("Gemini API Key is missing.");
+    return new GoogleGenAI({ apiKey: 'MISSING_KEY' }); 
+  }
+  return new GoogleGenAI({ apiKey: key });
+};
+
+/**
+ * Retrieves the API Key for DeepSeek.
+ */
 const getDeepSeekApiKey = () => {
-  // Priority: 
-  // 1. Build-time environment variable (Vite)
-  // 2. Runtime injection via window object (Streamlit/Python wrapper)
   // @ts-ignore
   const key = process.env.DEEPSEEK_API_KEY || (typeof window !== 'undefined' ? window.DEEPSEEK_API_KEY : '');
   if (!key) console.warn("DeepSeek API Key is missing. Check .env or Streamlit Secrets.");
@@ -50,7 +62,6 @@ const callDeepSeek = async (messages: any[], jsonMode: boolean = false) => {
 };
 
 const cleanJsonString = (str: string) => {
-  // Remove Markdown code blocks if present
   return str.replace(/```json/g, '').replace(/```/g, '').trim();
 };
 
@@ -93,6 +104,7 @@ export const generateVocabulary = async (
     };
 
     try {
+      const geminiAi = getGeminiClient();
       const response = await geminiAi.models.generateContent({
         model: GEMINI_MODEL,
         contents: userPrompt,
@@ -112,12 +124,11 @@ export const generateVocabulary = async (
       throw error;
     }
   } else {
-    // DeepSeek
     try {
       const content = await callDeepSeek([
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
-      ], true); // Enforce JSON mode
+      ], true);
       
       return JSON.parse(cleanJsonString(content)) as VocabularyItem[];
     } catch (error) {
@@ -163,6 +174,7 @@ export const generateVocabularyFromList = async (
     };
 
     try {
+      const geminiAi = getGeminiClient();
       const response = await geminiAi.models.generateContent({
         model: GEMINI_MODEL,
         contents: userPrompt,
@@ -182,12 +194,11 @@ export const generateVocabularyFromList = async (
       throw error;
     }
   } else {
-    // DeepSeek
     try {
       const content = await callDeepSeek([
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
-      ], true); // Enforce JSON mode
+      ], true);
       
       return JSON.parse(cleanJsonString(content)) as VocabularyItem[];
     } catch (error) {
@@ -198,34 +209,29 @@ export const generateVocabularyFromList = async (
 };
 
 /**
- * Analyzes writing for grammar, tone, and vocabulary usage.
- * Now also returns key vocabulary used in the improvement.
+ * Analyzes a text for improvements and vocabulary.
  */
 export const analyzeWriting = async (
   text: string, 
   context: string,
   provider: AiProvider = 'deepseek'
 ): Promise<{ 
-  correction: string, 
-  explanation: string, 
-  improvedVersion: string,
-  keyVocabulary: VocabularyItem[] 
-}> => {
+    correction: string, 
+    explanation: string, 
+    improvedVersion: string,
+    keyVocabulary: VocabularyItem[]
+  }> => {
   
-  const prompt = `Analyze the following English text intended for a ${context} context. 
-      User Text: "${text}"
-      
-      1. Identify grammar errors and suggest improvements.
-      2. Provide a 'correction' and a sophisticated 'improvedVersion'.
-      3. Extract 3 high-quality vocabulary words used in your 'improvedVersion' that would be valuable for the user to learn.
-      
-      Return JSON with keys: 
-      - 'correction' (string)
-      - 'explanation' (string)
-      - 'improvedVersion' (string)
-      - 'keyVocabulary' (array of objects matching VocabularyItem structure: word, phonetic, definition, chineseTranslation, exampleSentence, mnemonic, context).
-      
-      IMPORTANT: Generate a unique 'mnemonic' for each vocabulary word to help retention.`;
+  const systemPrompt = "You are a professional editor. Improve the user's writing and teach them better vocabulary.";
+  const userPrompt = `Analyze this text intended for a "${context}":
+  "${text}"
+
+  1. Correct grammar mistakes.
+  2. Provide a 'native speaker' improved version that sounds more professional or natural.
+  3. Explain the main changes.
+  4. Extract or suggest 2-3 advanced vocabulary words that fit this context, with mnemonics.
+
+  RETURN JSON ONLY with keys: correction, explanation, improvedVersion, keyVocabulary (array of objects with word, definition, mnemonic, phonetic).`;
 
   if (provider === 'gemini') {
     const schema: Schema = {
@@ -240,79 +246,82 @@ export const analyzeWriting = async (
             type: Type.OBJECT,
             properties: {
               word: { type: Type.STRING },
-              phonetic: { type: Type.STRING },
               definition: { type: Type.STRING },
-              chineseTranslation: { type: Type.STRING },
-              exampleSentence: { type: Type.STRING },
               mnemonic: { type: Type.STRING },
-              context: { type: Type.STRING, enum: ["Work", "Daily Life", "General"] }
-            },
-            required: ["word", "definition", "chineseTranslation", "exampleSentence", "mnemonic"]
+              phonetic: { type: Type.STRING }
+            }
           }
         }
       }
     };
 
-    const response = await geminiAi.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema
-      }
-    });
+    try {
+      const geminiAi = getGeminiClient();
+      const response = await geminiAi.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: userPrompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: schema,
+          systemInstruction: systemPrompt
+        }
+      });
 
-    if (response.text) return JSON.parse(response.text);
-    throw new Error("No response");
+      if (response.text) {
+        return JSON.parse(response.text);
+      }
+      throw new Error("Empty response from Gemini");
+    } catch (error) {
+      console.error("Gemini Error:", error);
+      throw error;
+    }
   } else {
-    // DeepSeek
-    const content = await callDeepSeek([
-      { role: "user", content: prompt }
-    ], true);
-    return JSON.parse(cleanJsonString(content));
+    try {
+      const content = await callDeepSeek([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ], true);
+      
+      return JSON.parse(cleanJsonString(content));
+    } catch (error) {
+      console.error("DeepSeek Error:", error);
+      throw error;
+    }
   }
 };
 
 /**
- * Chat Session Interface to abstract different providers
+ * Creates a chat session for the Oral Coach.
  */
-export interface ChatSession {
-  sendMessage: (text: string) => Promise<string>;
-}
-
-/**
- * Creates a chat session based on provider.
- */
-export const createChatSession = (
-  provider: AiProvider, 
-  systemInstruction: string
-): ChatSession => {
+export const createChatSession = (provider: AiProvider, systemPrompt: string): ChatSession => {
   if (provider === 'gemini') {
+    const geminiAi = getGeminiClient();
     const chat = geminiAi.chats.create({
       model: GEMINI_MODEL,
-      config: { systemInstruction }
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.7
+      }
     });
-    
+
     return {
-      sendMessage: async (text: string) => {
-        const result = await chat.sendMessage({ message: text });
-        return result.text || "";
+      sendMessage: async (msg: string) => {
+        const response = await chat.sendMessage(msg);
+        return response.text || "";
       }
     };
   } else {
-    // DeepSeek implementation of ChatSession (Managing history locally)
-    let history: { role: string, content: string }[] = [
-      { role: "system", content: systemInstruction }
-    ];
+    // Basic context management for DeepSeek (stateless REST API)
+    // In a real app, you'd want to persist 'history' in the React component and pass it here.
+    // For this simplified version, we'll keep a local history closure.
+    const history: any[] = [{ role: "system", content: systemPrompt }];
 
     return {
-      sendMessage: async (text: string) => {
-        history.push({ role: "user", content: text });
-        
-        const responseContent = await callDeepSeek(history, false);
-        
-        history.push({ role: "assistant", content: responseContent });
-        return responseContent;
+      sendMessage: async (msg: string) => {
+        history.push({ role: "user", content: msg });
+        const responseText = await callDeepSeek(history, false);
+        history.push({ role: "assistant", content: responseText });
+        return responseText;
       }
     };
   }
