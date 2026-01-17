@@ -2,9 +2,11 @@
 # exit on error
 set -o errexit
 
-# Install Node dependencies and build the React app
-npm install
-npm run build
+# Only try to install node stuff if npm is available
+if command -v npm &> /dev/null
+then
+    npm install
+    npm run build
+fi
 
-# Install Python dependencies
 pip install -r requirements.txt
