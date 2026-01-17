@@ -9,13 +9,24 @@ st.set_page_config(
     page_icon="🧠"
 )
 
+def get_secret(key):
+    """Safely get secret from environment or Streamlit secrets."""
+    if key in os.environ:
+        return os.environ[key]
+    try:
+        # Accessing st.secrets triggers a FileNotFoundError if the file doesn't exist
+        # so we wrap it in a try/except block.
+        return st.secrets.get(key, "")
+    except FileNotFoundError:
+        return ""
+
 def load_react_app():
     # The React build output directory
     build_dir = os.path.join(os.path.dirname(__file__), "dist")
     assets_dir = os.path.join(build_dir, "assets")
     
     if not os.path.exists(build_dir):
-        st.error("React build not found. If you are on Render, ensure the build command 'npm run build' completed successfully.")
+        st.error("React build not found. If you are on Render, ensure the build command 'npm run build' completed successfully (or that Docker built it).")
         return
 
     index_path = os.path.join(build_dir, "index.html")
@@ -53,16 +64,13 @@ def load_react_app():
     # --- ASSET INLINING END ---
 
     # --- KEY INJECTION START ---
-    # Fetch API Keys from Environment (standard on Render) or Streamlit Secrets
-    gemini_key = os.environ.get("API_KEY") or st.secrets.get("API_KEY", "")
-    deepseek_key = os.environ.get("DEEPSEEK_API_KEY") or st.secrets.get("DEEPSEEK_API_KEY", "")
+    gemini_key = get_secret("API_KEY")
+    deepseek_key = get_secret("DEEPSEEK_API_KEY")
 
-    # Inject the keys into the window object so React can read them if they aren't provided via process.env
+    # Inject the keys into the window object so React can read them
     injection_script = f"""
     <script>
         window.DEEPSEEK_API_KEY = "{deepseek_key}";
-        // Note: Gemini SDK usually reads process.env.API_KEY directly 
-        // if configured in your bundler (Vite), but we inject for safety.
         window.API_KEY = "{gemini_key}";
     </script>
     """
@@ -70,7 +78,6 @@ def load_react_app():
     # --- KEY INJECTION END ---
 
     # Render the App
-    # We use height=900 but this can be adjusted. Scrolling=True is safer for mobile.
     st.components.v1.html(html_content, height=1000, scrolling=True)
 
 # Run the loader
