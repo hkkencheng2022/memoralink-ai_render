@@ -4,6 +4,12 @@ import { VocabularyItem, AiProvider } from "../types";
 
 const MODEL_NAME = 'gemini-3-flash-preview';
 
+// Helper to get the correct API key from process.env
+const getApiKey = (provider: AiProvider) => {
+  if (provider === 'deepseek') return process.env.DEEPSEEK_API_KEY;
+  return process.env.API_KEY;
+};
+
 export const generateVocabulary = async (
   topic: string, 
   count: number = 3, 
@@ -36,7 +42,8 @@ export const generateVocabulary = async (
     }
   });
   
-  return JSON.parse(response.text || "[]");
+  const text = response.text || "[]";
+  return JSON.parse(text.trim());
 };
 
 export const generateVocabularyFromList = async (
@@ -68,7 +75,8 @@ export const generateVocabularyFromList = async (
     }
   });
   
-  return JSON.parse(response.text || "[]");
+  const text = response.text || "[]";
+  return JSON.parse(text.trim());
 };
 
 export const analyzeWriting = async (
@@ -106,7 +114,8 @@ export const analyzeWriting = async (
       }
     }
   });
-  return JSON.parse(response.text || "{}");
+  const resText = response.text || "{}";
+  return JSON.parse(resText.trim());
 };
 
 export interface ChatSession {
@@ -124,7 +133,6 @@ export const createChatSession = (_provider: AiProvider, systemInstruction: stri
 
   return {
     sendMessage: async (msg: string) => {
-      // FIX: Parameters must be passed as an object with 'message' property
       const result = await chat.sendMessage({ message: msg });
       return result.text || "";
     }
