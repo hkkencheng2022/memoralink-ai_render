@@ -1,0 +1,7 @@
+{
+  "name": "MemoraLink English AI Render",
+  "description": "An intelligent English learning assistant focused on vocabulary retention, contextual writing, and oral exam preparation using mnemonics and AI feedback.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
