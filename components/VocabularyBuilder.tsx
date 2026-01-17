@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { TOPICS, VocabularyItem, AiProvider } from '../types';
 import { generateVocabulary, generateVocabularyFromList } from '../services/geminiService';
@@ -44,11 +45,11 @@ export const VocabularyBuilder: React.FC<VocabularyBuilderProps> = ({ aiProvider
     try {
       if (mode === 'topic') {
         const selectedTopic = customTopic.trim() || topic;
-        const newWords = await generateVocabulary(selectedTopic, count, difficulty, aiProvider);
+        // Fixed: Adjusted arguments to match service definition
+        const newWords = await generateVocabulary(selectedTopic, count, difficulty);
         setWords(newWords);
       } else {
         // Import Mode
-        // Split by newlines or commas, filter empty strings
         const rawList = importText.split(/[\n,]+/).map(w => w.trim()).filter(w => w.length > 0);
         
         if (rawList.length === 0) {
