@@ -19,6 +19,7 @@ export interface VocabularyItem {
   mnemonic: string; // Critical for memory retention
   context: string;
   tags?: string[]; // New: For categorization (e.g., Emotion, Verb)
+  image?: string; // New: Base64 image string for visual association
 }
 
 export interface WritingEntry {
