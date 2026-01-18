@@ -1,9 +1,11 @@
+
 export enum AppView {
   DASHBOARD = 'DASHBOARD',
   VOCABULARY = 'VOCABULARY',
   WRITING = 'WRITING',
   SPEAKING = 'SPEAKING',
-  LIBRARY = 'LIBRARY'
+  LIBRARY = 'LIBRARY',
+  QUIZ = 'QUIZ'
 }
 
 export type AiProvider = 'gemini' | 'deepseek';
@@ -15,7 +17,8 @@ export interface VocabularyItem {
   chineseTranslation: string;
   exampleSentence: string;
   mnemonic: string; // Critical for memory retention
-  context: 'Work' | 'Daily Life' | 'General';
+  context: string;
+  tags?: string[]; // New: For categorization (e.g., Emotion, Verb)
 }
 
 export interface WritingEntry {

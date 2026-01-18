@@ -7,11 +7,13 @@ import { VocabularyBuilder } from './components/VocabularyBuilder';
 import { WritingLab } from './components/WritingLab';
 import { OralCoach } from './components/OralCoach';
 import { Library } from './components/Library';
+import { QuizRoom } from './components/QuizRoom';
 import { Sparkles, Cpu } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
-  const [provider, setProvider] = useState<AiProvider>('gemini');
+  // Requirement 1: DeepSeek as default
+  const [provider, setProvider] = useState<AiProvider>('deepseek');
 
   const renderView = () => {
     switch (currentView) {
@@ -25,6 +27,8 @@ export default function App() {
         return <WritingLab aiProvider={provider} />;
       case AppView.SPEAKING:
         return <OralCoach aiProvider={provider} />;
+      case AppView.QUIZ:
+        return <QuizRoom aiProvider={provider} />;
       default:
         return <Dashboard setView={setCurrentView} />;
     }
@@ -46,16 +50,16 @@ export default function App() {
            <div className="flex items-center gap-3">
               <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
                 <button 
-                  onClick={() => setProvider('gemini')}
-                  className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${provider === 'gemini' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                  GEMINI
-                </button>
-                <button 
                   onClick={() => setProvider('deepseek')}
                   className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${provider === 'deepseek' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   DEEPSEEK
+                </button>
+                <button 
+                  onClick={() => setProvider('gemini')}
+                  className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${provider === 'gemini' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  GEMINI
                 </button>
               </div>
 
