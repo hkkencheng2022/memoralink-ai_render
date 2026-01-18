@@ -78,7 +78,7 @@ export const generateVocabulary = async (
 ): Promise<VocabularyItem[]> => {
   const prompt = `Topic: ${topic}. Difficulty: ${difficulty}. 
     The user has very poor memory. Provide ${count} words with unique, vivid, and funny stories (mnemonics) to help them remember.
-    Include Chinese translations, phonetics, and a 'tags' array (e.g., ["Emotion", "Verb", "Business"]) for each word. Return ONLY valid JSON.`;
+    Include Traditional Chinese translations (繁體中文), phonetics, and a 'tags' array (e.g., ["Emotion", "Verb", "Business"]) for each word. Return ONLY valid JSON.`;
   
   // Note: generateVocabulary currently hardcodes Gemini usage. 
   // To use DeepSeek here too, we would need to pass the provider or default to one.
@@ -98,7 +98,7 @@ export const generateVocabulary = async (
             word: { type: Type.STRING },
             phonetic: { type: Type.STRING },
             definition: { type: Type.STRING },
-            chineseTranslation: { type: Type.STRING },
+            chineseTranslation: { type: Type.STRING, description: "Traditional Chinese translation (繁體中文)" },
             exampleSentence: { type: Type.STRING },
             mnemonic: { type: Type.STRING },
             context: { type: Type.STRING },
@@ -119,9 +119,9 @@ export const generateVocabularyFromList = async (
 ): Promise<VocabularyItem[]> => {
   const sys = `You are a vocabulary expert. Create memory aid cards for the provided words.
   IMPORTANT: You must return a valid JSON array of objects. 
-  Each object MUST contain strictly these keys: "word", "phonetic", "definition", "chineseTranslation", "exampleSentence", "mnemonic", "context", "tags".`;
+  Each object MUST contain strictly these keys: "word", "phonetic", "definition", "chineseTranslation" (Must be Traditional Chinese 繁體中文), "exampleSentence", "mnemonic", "context", "tags".`;
   
-  const prompt = `Create cards for: ${words.join(', ')}. Ensure the "exampleSentence" key is present for every word.`;
+  const prompt = `Create cards for: ${words.join(', ')}. Ensure the "exampleSentence" key is present for every word. Translate to Traditional Chinese (繁體中文).`;
 
   if (provider === 'deepseek') {
     const resText = await callDeepSeek(prompt, sys);
@@ -143,7 +143,7 @@ export const generateVocabularyFromList = async (
             word: { type: Type.STRING },
             phonetic: { type: Type.STRING },
             definition: { type: Type.STRING },
-            chineseTranslation: { type: Type.STRING },
+            chineseTranslation: { type: Type.STRING, description: "Traditional Chinese translation (繁體中文)" },
             exampleSentence: { type: Type.STRING },
             mnemonic: { type: Type.STRING },
             context: { type: Type.STRING },
@@ -171,13 +171,13 @@ export const generateVocabularyByTopic = async (
   - "word": The vocabulary word.
   - "phonetic": IPA pronunciation.
   - "definition": English definition.
-  - "chineseTranslation": Traditional Chinese translation.
+  - "chineseTranslation": Traditional Chinese translation (繁體中文).
   - "exampleSentence": A clear sentence using the word in context.
   - "mnemonic": A vivid, funny, or weird story to help remember the word.
   - "context": Brief usage context (e.g., Formal, Slang).
   - "tags": Array of related keywords (e.g., ["Business", "Verb"]).`;
 
-  const prompt = `Generate ${count} vocabulary cards for topic '${topic}'. Ensure exact JSON keys including "exampleSentence".`;
+  const prompt = `Generate ${count} vocabulary cards for topic '${topic}'. Ensure exact JSON keys including "exampleSentence". All Chinese must be Traditional (繁體中文).`;
 
   if (provider === 'deepseek') {
     const resText = await callDeepSeek(prompt, sys);
@@ -194,8 +194,9 @@ export const analyzeWriting = async (
   provider: AiProvider
 ): Promise<any> => {
   const sys = `Task: 1. Correct grammar. 2. Suggest a native version. 3. Provide 2-3 key vocabulary words with mnemonics.
-    IMPORTANT: Return the response strictly as a JSON object with keys: correction, explanation, improvedVersion, keyVocabulary (array of objects with word, definition, mnemonic, phonetic, chineseTranslation, exampleSentence, tags).`;
-  const prompt = `Context: ${context}. Text to analyze: "${text}".`;
+    IMPORTANT: Return the response strictly as a JSON object with keys: correction, explanation, improvedVersion, keyVocabulary (array of objects with word, definition, mnemonic, phonetic, chineseTranslation, exampleSentence, tags).
+    All explanations and translations must be in Traditional Chinese (繁體中文) where applicable.`;
+  const prompt = `Context: ${context}. Text to analyze: "${text}". Output in Traditional Chinese (繁體中文).`;
 
   if (provider === 'deepseek') {
     const resText = await callDeepSeek(prompt, sys);
@@ -224,7 +225,7 @@ export const analyzeWriting = async (
                 definition: { type: Type.STRING },
                 mnemonic: { type: Type.STRING },
                 phonetic: { type: Type.STRING },
-                chineseTranslation: { type: Type.STRING },
+                chineseTranslation: { type: Type.STRING, description: "Traditional Chinese translation (繁體中文)" },
                 exampleSentence: { type: Type.STRING },
                 tags: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
@@ -243,6 +244,8 @@ export interface ChatSession {
 }
 
 export const createChatSession = (provider: AiProvider, systemInstruction: string): ChatSession => {
+  const enhancedSystemInstruction = systemInstruction + " Please ensure any Chinese text provided is in Traditional Chinese (繁體中文).";
+
   if (provider === 'deepseek') {
     let history: {role: string, content: string}[] = [];
     return {
@@ -257,7 +260,7 @@ export const createChatSession = (provider: AiProvider, systemInstruction: strin
           },
           body: JSON.stringify({
             model: DEEPSEEK_MODEL,
-            messages: [{ role: "system", content: systemInstruction }, ...history]
+            messages: [{ role: "system", content: enhancedSystemInstruction }, ...history]
           })
         });
         
@@ -278,7 +281,7 @@ export const createChatSession = (provider: AiProvider, systemInstruction: strin
   const chat = ai.chats.create({
     model: GEMINI_MODEL,
     config: {
-      systemInstruction,
+      systemInstruction: enhancedSystemInstruction,
     }
   });
 
