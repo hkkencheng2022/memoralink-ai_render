@@ -13,7 +13,7 @@ export const Library: React.FC = () => {
   const [revealedCards, setRevealedCards] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Editing State (Req 2)
+  // Editing State
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [tempTags, setTempTags] = useState('');
 
@@ -72,7 +72,7 @@ export const Library: React.FC = () => {
     }
   };
 
-  // Req 2: Edit Tags
+  // Edit Tags
   const startEditing = (index: number, tags: string[] = []) => {
     setEditingIndex(index);
     setTempTags(tags.join(', '));
@@ -87,30 +87,40 @@ export const Library: React.FC = () => {
     setEditingIndex(null);
   };
 
-  // Req 3: Enhanced Export
-  const handleExportAnki = () => {
+  const handleExportCSV = () => {
     if (items.length === 0) return;
-    // Format: Word; Meaning; Chinese; Mnemonic; Example; Tags; Phonetic
-    let csvContent = "data:text/csv;charset=utf-8,Word;Definition;Chinese;Mnemonic;Example;Tags;Phonetic\n";
+    
+    // Add BOM (\uFEFF) so Excel opens it with correct UTF-8 encoding
+    let csvContent = "\uFEFFWord;Definition;Chinese註解;Mnemonic;Example\n";
+    
     items.forEach(item => {
-      const tags = item.tags ? item.tags.join(', ') : '';
-      // Escape quotes for CSV
+      // Helper to escape quotes within the text
       const clean = (s: string) => `"${(s || '').replace(/"/g, '""')}"`;
-      csvContent += `${clean(item.word)};${clean(item.definition)};${clean(item.chineseTranslation)};${clean(item.mnemonic)};${clean(item.exampleSentence)};${clean(tags)};${clean(item.phonetic || '')}\n`;
+      
+      csvContent += `${clean(item.word)};${clean(item.definition)};${clean(item.chineseTranslation)};${clean(item.mnemonic)};${clean(item.exampleSentence)}\n`;
     });
+
     const link = document.createElement("a");
-    link.href = encodeURI(csvContent);
-    link.download = "memoralink_full_export.csv";
+    link.href = encodeURI("data:text/csv;charset=utf-8," + csvContent);
+    link.download = "memoralink_export.csv";
     link.click();
   };
 
-  // Req 2: Search tags
   const filteredItems = items.filter(item => 
     item.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.definition.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.chineseTranslation.includes(searchTerm) ||
     (item.tags && item.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())))
   );
+
+  const handleSpeak = (text: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if ('speechSynthesis' in window) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang='en-US'; 
+      window.speechSynthesis.speak(u); 
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 pb-24 md:pb-8">
@@ -121,7 +131,7 @@ export const Library: React.FC = () => {
            <button onClick={handleBackupData} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 flex items-center gap-2"><FileJson className="w-4 h-4" /> Backup</button>
            <button onClick={handleRestoreClick} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 flex items-center gap-2"><Upload className="w-4 h-4" /> Restore</button>
            {activeTab === 'vocabulary' && (
-             <button onClick={handleExportAnki} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-2"><Download className="w-4 h-4" /> 匯出卡庫 (CSV)</button>
+             <button onClick={handleExportCSV} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-2"><Download className="w-4 h-4" /> CSV</button>
            )}
         </div>
       </div>
@@ -145,7 +155,7 @@ export const Library: React.FC = () => {
                   <h3 className="text-lg font-bold">{item.word}</h3>
                   <div className="flex items-center gap-2 mt-1">
                      <span className="text-xs text-slate-500 font-mono">{item.phonetic}</span>
-                     <button onClick={() => { if('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(item.word); u.lang='en-US'; window.speechSynthesis.speak(u); } }} className="text-slate-400 hover:text-indigo-600"><Volume2 className="w-3 h-3" /></button>
+                     <button onClick={(e) => handleSpeak(item.word, e)} className="text-slate-400 hover:text-indigo-600"><Volume2 className="w-3 h-3" /></button>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -154,7 +164,7 @@ export const Library: React.FC = () => {
                 </div>
               </div>
 
-              {/* Tag Section - Updated to white text */}
+              {/* Tag Section */}
               <div className="flex flex-wrap gap-1 items-center min-h-[24px]">
                 {editingIndex === index ? (
                   <div className="flex items-center gap-1 w-full animate-in fade-in">
