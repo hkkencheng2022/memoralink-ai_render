@@ -117,8 +117,11 @@ export const generateVocabularyFromList = async (
   words: string[],
   provider: AiProvider
 ): Promise<VocabularyItem[]> => {
-  const sys = "You are a vocabulary expert. Create memory aid cards. Include a 'tags' array (e.g. ['Noun', 'Positive']) for categorization. Return ONLY a JSON array.";
-  const prompt = `Create cards for: ${words.join(', ')}. Format as JSON array of objects with keys: word, phonetic, definition, chineseTranslation, exampleSentence, mnemonic, context, tags.`;
+  const sys = `You are a vocabulary expert. Create memory aid cards for the provided words.
+  IMPORTANT: You must return a valid JSON array of objects. 
+  Each object MUST contain strictly these keys: "word", "phonetic", "definition", "chineseTranslation", "exampleSentence", "mnemonic", "context", "tags".`;
+  
+  const prompt = `Create cards for: ${words.join(', ')}. Ensure the "exampleSentence" key is present for every word.`;
 
   if (provider === 'deepseek') {
     const resText = await callDeepSeek(prompt, sys);
@@ -161,8 +164,20 @@ export const generateVocabularyByTopic = async (
   difficulty: string,
   provider: AiProvider
 ): Promise<VocabularyItem[]> => {
-  const sys = `Topic: ${topic}. Difficulty: ${difficulty}. Provide ${count} words with mnemonics, Chinese, and 'tags' array. Return ONLY JSON array.`;
-  const prompt = `Generate ${count} vocabulary cards for topic '${topic}'. Include tags.`;
+  const sys = `Topic: ${topic}. Difficulty: ${difficulty}. You are a helpful vocabulary teacher.
+  Task: Provide ${count} words. 
+  Output Format: Return ONLY a raw JSON array of objects.
+  Required Keys for each object:
+  - "word": The vocabulary word.
+  - "phonetic": IPA pronunciation.
+  - "definition": English definition.
+  - "chineseTranslation": Traditional Chinese translation.
+  - "exampleSentence": A clear sentence using the word in context.
+  - "mnemonic": A vivid, funny, or weird story to help remember the word.
+  - "context": Brief usage context (e.g., Formal, Slang).
+  - "tags": Array of related keywords (e.g., ["Business", "Verb"]).`;
+
+  const prompt = `Generate ${count} vocabulary cards for topic '${topic}'. Ensure exact JSON keys including "exampleSentence".`;
 
   if (provider === 'deepseek') {
     const resText = await callDeepSeek(prompt, sys);
