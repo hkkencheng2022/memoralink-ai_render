@@ -140,7 +140,9 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
               <div className="text-sm text-red-700">
                 <p className="font-bold">Analysis Error</p>
                 <p>{error}</p>
-                <p className="mt-2 text-xs opacity-80">Make sure your Gemini API key (API_KEY) is correctly set in your environment variables.</p>
+                <p className="mt-2 text-xs opacity-80">
+                  Make sure your {aiProvider === 'deepseek' ? 'DeepSeek' : 'Gemini'} API key is correctly set in your environment variables.
+                </p>
               </div>
             </div>
           )}

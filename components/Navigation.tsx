@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { AppView } from '../types';
-import { BookOpen, PenTool, MessageCircle, LayoutDashboard, Library } from 'lucide-react';
+import { BookOpen, PenTool, MessageCircle, LayoutDashboard, Library, BrainCircuit } from 'lucide-react';
 
 interface NavigationProps {
   currentView: AppView;
@@ -12,6 +13,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) 
     { id: AppView.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
     { id: AppView.VOCABULARY, label: 'Vocabulary Builder', icon: BookOpen },
     { id: AppView.LIBRARY, label: 'My Library', icon: Library },
+    { id: AppView.QUIZ, label: 'Vocabulary Quiz', icon: BrainCircuit },
     { id: AppView.WRITING, label: 'Writing Lab', icon: PenTool },
     { id: AppView.SPEAKING, label: 'Oral Coach', icon: MessageCircle },
   ];
