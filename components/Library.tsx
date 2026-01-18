@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { VocabularyItem, WritingEntry } from '../types';
-import { Trash2, Eye, EyeOff, BookOpen, Search, Volume2, Download, FileText, ChevronDown, ChevronUp, Upload, FileJson, Tag, Edit3, X, Check } from 'lucide-react';
+import { Trash2, Eye, Search, Volume2, Download, ChevronDown, ChevronUp, Upload, FileJson, Edit3, X, Check } from 'lucide-react';
 
 type LibraryTab = 'vocabulary' | 'writing';
 
@@ -209,4 +209,3 @@ export const Library: React.FC = () => {
     </div>
   );
 };
-    

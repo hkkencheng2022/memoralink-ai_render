@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { VocabularyItem, AiProvider } from '../types';
 import { analyzeWriting, createChatSession } from '../services/geminiService';
-import { BrainCircuit, Loader2, Send, CheckCircle2, Bookmark, ArrowRight, RefreshCw, AlertCircle, BookOpen, Check, Volume2 } from 'lucide-react';
+import { BrainCircuit, Loader2, CheckCircle2, Bookmark, ArrowRight, RefreshCw, AlertCircle, BookOpen, Check, Volume2 } from 'lucide-react';
 
 interface QuizRoomProps {
   aiProvider: AiProvider;
@@ -245,4 +245,3 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ aiProvider }) => {
     </div>
   );
 };
-    
