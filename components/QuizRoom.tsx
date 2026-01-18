@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { VocabularyItem, AiProvider } from '../types';
 import { analyzeWriting, createChatSession } from '../services/geminiService';
-import { BrainCircuit, Loader2, CheckCircle2, Bookmark, ArrowRight, RefreshCw, AlertCircle, BookOpen, Check, Volume2 } from 'lucide-react';
+import { BrainCircuit, Loader2, CheckCircle2, Bookmark, ArrowRight, RefreshCw, AlertCircle, BookOpen, Check, Volume2, Mic, MicOff } from 'lucide-react';
 
 interface QuizRoomProps {
   aiProvider: AiProvider;
@@ -16,6 +16,9 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ aiProvider }) => {
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<any>(null);
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
+  
+  // Voice Input State
+  const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
     try {
@@ -56,6 +59,32 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ aiProvider }) => {
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utterance);
     }
+  };
+
+  const toggleMic = () => {
+    if (!('webkitSpeechRecognition' in window)) {
+      alert("Speech recognition is not supported in this browser. Please use Chrome.");
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setUserInput(prev => prev + (prev ? ' ' : '') + transcript);
+    };
+
+    recognition.start();
   };
 
   const startQuiz = async () => {
@@ -154,12 +183,24 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ aiProvider }) => {
            </div>
 
            <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
-              <textarea 
-                value={userInput}
-                onChange={e => setUserInput(e.target.value)}
-                placeholder="Write your response using the target words..."
-                className="w-full p-4 border rounded-xl bg-slate-50 min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+              <div className="relative">
+                <textarea 
+                  value={userInput}
+                  onChange={e => setUserInput(e.target.value)}
+                  placeholder="Type your response OR click the mic to speak..."
+                  className="w-full p-4 pr-12 border rounded-xl bg-slate-50 min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button 
+                   onClick={toggleMic}
+                   className={`absolute right-3 bottom-3 p-2 rounded-full transition-all duration-200 ${
+                     isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                   }`}
+                   title="Speak answer"
+                >
+                  {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                </button>
+              </div>
+
               <div className="flex gap-2">
                 <button onClick={() => setScenario(null)} className="px-4 py-2 border rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Reset</button>
                 <button 
