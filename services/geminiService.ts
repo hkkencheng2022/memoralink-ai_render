@@ -5,12 +5,27 @@ import { VocabularyItem, AiProvider } from "../types";
 const GEMINI_MODEL = 'gemini-3-flash-preview';
 const DEEPSEEK_MODEL = 'deepseek-chat'; // Standard DeepSeek model name
 
-// Helper to get the correct API key
+// Declare global window properties for runtime injection
+declare global {
+  interface Window {
+    API_KEY?: string;
+    DEEPSEEK_API_KEY?: string;
+  }
+}
+
+// Helper to get the correct API key from Window (Runtime) or Env (Build)
 const getApiKey = (provider: AiProvider) => {
   if (provider === 'deepseek') {
-    return process.env.DEEPSEEK_API_KEY || process.env.API_KEY;
+    const key = window.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY;
+    if (!key) {
+      throw new Error("DeepSeek API Key is missing. Please check your settings.");
+    }
+    return key;
   }
-  return process.env.API_KEY;
+  // Default to Gemini
+  const key = window.API_KEY || process.env.API_KEY;
+  // GoogleGenAI SDK will throw its own error if key is missing, but cleaner to check here
+  return key;
 };
 
 // Robust JSON extraction helper
@@ -29,7 +44,8 @@ const extractJson = (text: string) => {
  */
 async function callDeepSeek(prompt: string, systemInstruction: string) {
   const apiKey = getApiKey('deepseek');
-  const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+  // Updated URL to the standard chat completions endpoint
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -46,8 +62,9 @@ async function callDeepSeek(prompt: string, systemInstruction: string) {
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error?.message || `DeepSeek API error: ${response.status}`);
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData.error?.message || `DeepSeek API error: ${response.status} ${response.statusText}`;
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
@@ -59,13 +76,18 @@ export const generateVocabulary = async (
   count: number = 3, 
   difficulty: string = 'Intermediate'
 ): Promise<VocabularyItem[]> => {
-  // We use Gemini for vocabulary generation as it supports responseSchema strictly
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `Topic: ${topic}. Difficulty: ${difficulty}. 
+    The user has very poor memory. Provide ${count} words with unique, vivid, and funny stories (mnemonics) to help them remember.
+    Include Chinese translations, phonetics, and a 'tags' array (e.g., ["Emotion", "Verb", "Business"]) for each word. Return ONLY valid JSON.`;
+  
+  // Note: generateVocabulary currently hardcodes Gemini usage. 
+  // To use DeepSeek here too, we would need to pass the provider or default to one.
+  // For safety/schema support, keeping Gemini as default for this function unless called via generateVocabularyFromList/Topic logic.
+  
+  const ai = new GoogleGenAI({ apiKey: getApiKey('gemini') });
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
-    contents: `Topic: ${topic}. Difficulty: ${difficulty}. 
-    The user has very poor memory. Provide ${count} words with unique, vivid, and funny stories (mnemonics) to help them remember.
-    Include Chinese translations and phonetics. Return ONLY valid JSON.`,
+    contents: prompt,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -79,9 +101,10 @@ export const generateVocabulary = async (
             chineseTranslation: { type: Type.STRING },
             exampleSentence: { type: Type.STRING },
             mnemonic: { type: Type.STRING },
-            context: { type: Type.STRING }
+            context: { type: Type.STRING },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
-          required: ["word", "definition", "chineseTranslation", "mnemonic", "exampleSentence"]
+          required: ["word", "definition", "chineseTranslation", "mnemonic", "exampleSentence", "tags"]
         }
       }
     }
@@ -94,9 +117,10 @@ export const generateVocabularyFromList = async (
   words: string[],
   provider: AiProvider
 ): Promise<VocabularyItem[]> => {
+  const sys = "You are a vocabulary expert. Create memory aid cards. Include a 'tags' array (e.g. ['Noun', 'Positive']) for categorization. Return ONLY a JSON array.";
+  const prompt = `Create cards for: ${words.join(', ')}. Format as JSON array of objects with keys: word, phonetic, definition, chineseTranslation, exampleSentence, mnemonic, context, tags.`;
+
   if (provider === 'deepseek') {
-    const sys = "You are a vocabulary expert. Create memory aid cards for provided words. Focus on absurd mnemonics. Return ONLY a JSON array.";
-    const prompt = `Create cards for: ${words.join(', ')}. Format as JSON array of objects with keys: word, phonetic, definition, chineseTranslation, exampleSentence, mnemonic, context.`;
     const resText = await callDeepSeek(prompt, sys);
     return extractJson(resText);
   }
@@ -104,8 +128,9 @@ export const generateVocabularyFromList = async (
   const ai = new GoogleGenAI({ apiKey: getApiKey(provider) });
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
-    contents: `Create memory aid cards for: ${words.join(', ')}. Focus on absurd mnemonics for poor memory. Return ONLY valid JSON.`,
+    contents: prompt,
     config: {
+      systemInstruction: sys,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.ARRAY,
@@ -118,9 +143,10 @@ export const generateVocabularyFromList = async (
             chineseTranslation: { type: Type.STRING },
             exampleSentence: { type: Type.STRING },
             mnemonic: { type: Type.STRING },
-            context: { type: Type.STRING }
+            context: { type: Type.STRING },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
-          required: ["word", "definition", "chineseTranslation", "mnemonic", "exampleSentence"]
+          required: ["word", "definition", "chineseTranslation", "mnemonic", "exampleSentence", "tags"]
         }
       }
     }
@@ -129,13 +155,31 @@ export const generateVocabularyFromList = async (
   return extractJson(response.text || "[]");
 };
 
+export const generateVocabularyByTopic = async (
+  topic: string, 
+  count: number, 
+  difficulty: string,
+  provider: AiProvider
+): Promise<VocabularyItem[]> => {
+  const sys = `Topic: ${topic}. Difficulty: ${difficulty}. Provide ${count} words with mnemonics, Chinese, and 'tags' array. Return ONLY JSON array.`;
+  const prompt = `Generate ${count} vocabulary cards for topic '${topic}'. Include tags.`;
+
+  if (provider === 'deepseek') {
+    const resText = await callDeepSeek(prompt, sys);
+    return extractJson(resText);
+  }
+
+  // Fallback to Gemini
+  return generateVocabulary(topic, count, difficulty);
+};
+
 export const analyzeWriting = async (
   text: string, 
   context: string,
   provider: AiProvider
 ): Promise<any> => {
   const sys = `Task: 1. Correct grammar. 2. Suggest a native version. 3. Provide 2-3 key vocabulary words with mnemonics.
-    IMPORTANT: Return the response strictly as a JSON object with keys: correction, explanation, improvedVersion, keyVocabulary (array of objects with word, definition, mnemonic, phonetic, chineseTranslation, exampleSentence).`;
+    IMPORTANT: Return the response strictly as a JSON object with keys: correction, explanation, improvedVersion, keyVocabulary (array of objects with word, definition, mnemonic, phonetic, chineseTranslation, exampleSentence, tags).`;
   const prompt = `Context: ${context}. Text to analyze: "${text}".`;
 
   if (provider === 'deepseek') {
@@ -166,7 +210,8 @@ export const analyzeWriting = async (
                 mnemonic: { type: Type.STRING },
                 phonetic: { type: Type.STRING },
                 chineseTranslation: { type: Type.STRING },
-                exampleSentence: { type: Type.STRING }
+                exampleSentence: { type: Type.STRING },
+                tags: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
             }
           }
@@ -189,7 +234,7 @@ export const createChatSession = (provider: AiProvider, systemInstruction: strin
       sendMessage: async (msg: string) => {
         const apiKey = getApiKey('deepseek');
         history.push({ role: "user", content: msg });
-        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -200,6 +245,12 @@ export const createChatSession = (provider: AiProvider, systemInstruction: strin
             messages: [{ role: "system", content: systemInstruction }, ...history]
           })
         });
+        
+        if (!response.ok) {
+           const err = await response.json().catch(() => ({}));
+           throw new Error(err.error?.message || `DeepSeek Error: ${response.status}`);
+        }
+
         const data = await response.json();
         const content = data.choices[0].message.content;
         history.push({ role: "assistant", content });
