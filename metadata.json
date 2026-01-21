@@ -1,5 +1,5 @@
 {
-  "name": "MemoraLink English AI in LOCAL",
+  "name": "MemoraLink English AI in Render",
   "description": "AI-powered English learning for users with memory difficulties.",
   "requestFramePermissions": [
     "microphone"
