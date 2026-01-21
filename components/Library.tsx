@@ -110,6 +110,16 @@ export const Library: React.FC = () => {
       localStorage.setItem('memoralink_library', JSON.stringify(newItems));
     }
   };
+  
+  const handleClearAll = () => {
+    if (confirm("⚠️ WARNING: Are you sure you want to delete ALL data from your library? This action cannot be undone.")) {
+      setItems([]);
+      setWritingItems([]);
+      setRevealedCards(new Set());
+      localStorage.removeItem('memoralink_library');
+      localStorage.removeItem('memoralink_writing_library');
+    }
+  };
 
   // Edit Tags
   const startEditing = (index: number, tags: string[] = []) => {
@@ -240,6 +250,9 @@ export const Library: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
            <button onClick={handleBackupData} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 flex items-center gap-2"><FileJson className="w-4 h-4" /> Backup</button>
            <button onClick={handleRestoreClick} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 flex items-center gap-2"><Upload className="w-4 h-4" /> Restore</button>
+           
+           <button onClick={handleClearAll} className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold border border-red-200 flex items-center gap-2 hover:bg-red-100 transition-colors"><Trash2 className="w-4 h-4" /> Clear All</button>
+
            {activeTab === 'vocabulary' && (
              <button onClick={handleExportCSV} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-2"><Download className="w-4 h-4" /> CSV</button>
            )}
