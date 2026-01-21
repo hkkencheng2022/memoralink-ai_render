@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { VocabularyItem, WritingEntry } from '../types';
-import { Trash2, Eye, Search, Volume2, Download, ChevronDown, ChevronUp, Upload, FileJson, Edit3, X, Check, Image as ImageIcon, Maximize2 } from 'lucide-react';
+import { storage } from '../services/storage';
+import { Trash2, Eye, Search, Volume2, Download, ChevronDown, ChevronUp, Upload, FileJson, Edit3, X, Check, Image as ImageIcon, Maximize2, Loader2 } from 'lucide-react';
 
 type LibraryTab = 'vocabulary' | 'writing';
 
@@ -12,6 +13,7 @@ export const Library: React.FC = () => {
   const [items, setItems] = useState<VocabularyItem[]>([]);
   const [revealedCards, setRevealedCards] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   // Editing State
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -33,14 +35,18 @@ export const Library: React.FC = () => {
     loadData();
   }, []);
 
-  const loadData = () => {
+  const loadData = async () => {
+    setIsLoadingData(true);
     try {
-      const savedVocab = localStorage.getItem('memoralink_library');
-      if (savedVocab) setItems(JSON.parse(savedVocab));
-      const savedWriting = localStorage.getItem('memoralink_writing_library');
-      if (savedWriting) setWritingItems(JSON.parse(savedWriting));
+      const savedVocab = await storage.get<VocabularyItem[]>('memoralink_library');
+      if (savedVocab) setItems(savedVocab);
+      
+      const savedWriting = await storage.get<WritingEntry[]>('memoralink_writing_library');
+      if (savedWriting) setWritingItems(savedWriting);
     } catch(e) {
       console.error("Failed to load library", e);
+    } finally {
+      setIsLoadingData(false);
     }
   };
 
@@ -57,14 +63,31 @@ export const Library: React.FC = () => {
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; if (!file) return;
+    
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
+        setIsLoadingData(true);
         const data = JSON.parse(e.target?.result as string);
-        if (data.vocabulary) localStorage.setItem('memoralink_library', JSON.stringify(data.vocabulary));
-        if (data.writingLogs) localStorage.setItem('memoralink_writing_library', JSON.stringify(data.writingLogs));
-        loadData(); alert("Data restored!");
-      } catch (error) { alert("Invalid file"); }
+        
+        if (data.vocabulary) {
+          await storage.set('memoralink_library', data.vocabulary);
+          setItems(data.vocabulary);
+        }
+        if (data.writingLogs) {
+          await storage.set('memoralink_writing_library', data.writingLogs);
+          setWritingItems(data.writingLogs);
+        }
+        
+        alert(`Restore successful! Loaded ${data.vocabulary?.length || 0} words.`);
+      } catch (error) { 
+        console.error(error);
+        alert("Invalid file or restore failed."); 
+      } finally {
+        setIsLoadingData(false);
+        // Clear input
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     };
     reader.readAsText(file);
   };
@@ -79,13 +102,13 @@ export const Library: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file || uploadTargetIndex.current === null) return;
 
-    // Basic size check (optional, but good practice for localStorage)
-    if (file.size > 2000000) { // 2MB limit warning
-       if (!confirm("This image is large and might fill up your storage. Continue?")) return;
+    // Warning for very large images, though IDB can handle them better than LocalStorage
+    if (file.size > 5000000) { // 5MB warning
+       if (!confirm("This image is quite large (>5MB). It may slow down loading. Continue?")) return;
     }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const base64String = e.target?.result as string;
       const newItems = [...items];
       newItems[uploadTargetIndex.current!] = {
@@ -93,7 +116,7 @@ export const Library: React.FC = () => {
         image: base64String
       };
       setItems(newItems);
-      localStorage.setItem('memoralink_library', JSON.stringify(newItems));
+      await storage.set('memoralink_library', newItems);
       
       // Reset input
       if (imageInputRef.current) imageInputRef.current.value = '';
@@ -103,21 +126,20 @@ export const Library: React.FC = () => {
   };
 
   // --- Vocabulary Logic ---
-  const handleDeleteVocab = (index: number) => {
+  const handleDeleteVocab = async (index: number) => {
     if (confirm('Remove this word?')) {
       const newItems = items.filter((_, i) => i !== index);
       setItems(newItems);
-      localStorage.setItem('memoralink_library', JSON.stringify(newItems));
+      await storage.set('memoralink_library', newItems);
     }
   };
   
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     if (confirm("⚠️ WARNING: Are you sure you want to delete ALL data from your library? This action cannot be undone.")) {
       setItems([]);
       setWritingItems([]);
       setRevealedCards(new Set());
-      localStorage.removeItem('memoralink_library');
-      localStorage.removeItem('memoralink_writing_library');
+      await storage.clearAll();
     }
   };
 
@@ -127,12 +149,12 @@ export const Library: React.FC = () => {
     setTempTags(tags.join(', '));
   };
 
-  const saveTags = (index: number) => {
+  const saveTags = async (index: number) => {
     const newItems = [...items];
     const tagsArray = tempTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
     newItems[index].tags = tagsArray;
     setItems(newItems);
-    localStorage.setItem('memoralink_library', JSON.stringify(newItems));
+    await storage.set('memoralink_library', newItems);
     setEditingIndex(null);
   };
 
@@ -173,6 +195,15 @@ export const Library: React.FC = () => {
 
   // --- Focus Modal Content ---
   const focusedItem = focusedIndex !== null ? filteredItems[focusedIndex] : null;
+
+  if (isLoadingData) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <span className="ml-2 text-slate-600">Loading Library...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 pb-24 md:pb-8">

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { TOPICS, VocabularyItem, AiProvider } from '../types';
 import { generateVocabularyByTopic, generateVocabularyFromList } from '../services/geminiService';
+import { storage } from '../services/storage';
 import { Loader2, Eye, EyeOff, BrainCircuit, Bookmark, Check, Volume2, Upload, Zap, RefreshCw } from 'lucide-react';
 
 interface VocabularyBuilderProps {
@@ -11,7 +12,7 @@ interface VocabularyBuilderProps {
 type Mode = 'topic' | 'import';
 
 export const VocabularyBuilder: React.FC<VocabularyBuilderProps> = ({ aiProvider }) => {
-  // Requirement 5: Persistence - Load from Session Storage if available
+  // Persistence - Load from Session Storage if available (transient state)
   const [mode, setMode] = useState<Mode>(() => {
     return (sessionStorage.getItem('vocab_mode') as Mode) || 'topic';
   });
@@ -22,7 +23,7 @@ export const VocabularyBuilder: React.FC<VocabularyBuilderProps> = ({ aiProvider
   const [count, setCount] = useState<number>(3);
   const [importText, setImportText] = useState('');
 
-  // Requirement 5: Persistence - Load words
+  // Current generated words (transient)
   const [words, setWords] = useState<VocabularyItem[]>(() => {
     const cached = sessionStorage.getItem('vocab_cached_words');
     return cached ? JSON.parse(cached) : [];
@@ -32,16 +33,18 @@ export const VocabularyBuilder: React.FC<VocabularyBuilderProps> = ({ aiProvider
   const [revealedCards, setRevealedCards] = useState<Set<number>>(new Set());
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
 
-  // Check saved status
+  // Check saved status from IndexedDB
   useEffect(() => {
-    const saved = localStorage.getItem('memoralink_library');
-    if (saved) {
-      const parsed = JSON.parse(saved) as VocabularyItem[];
-      setSavedWords(new Set(parsed.map(i => i.word)));
-    }
+    const checkSaved = async () => {
+      const saved = await storage.get<VocabularyItem[]>('memoralink_library');
+      if (saved) {
+        setSavedWords(new Set(saved.map(i => i.word)));
+      }
+    };
+    checkSaved();
   }, []);
 
-  // Requirement 5: Persistence - Save to Session Storage on change
+  // Save transient state to Session Storage
   useEffect(() => {
     sessionStorage.setItem('vocab_cached_words', JSON.stringify(words));
     sessionStorage.setItem('vocab_mode', mode);
@@ -73,7 +76,6 @@ export const VocabularyBuilder: React.FC<VocabularyBuilderProps> = ({ aiProvider
     }
   };
 
-  // Requirement 4: Refresh/Clear function
   const handleClear = () => {
     if (confirm("Clear all generated cards and start fresh?")) {
       setWords([]);
@@ -92,13 +94,12 @@ export const VocabularyBuilder: React.FC<VocabularyBuilderProps> = ({ aiProvider
     setRevealedCards(newRevealed);
   };
 
-  const handleSave = (item: VocabularyItem) => {
-    const currentStorage = localStorage.getItem('memoralink_library');
-    let library: VocabularyItem[] = currentStorage ? JSON.parse(currentStorage) : [];
+  const handleSave = async (item: VocabularyItem) => {
+    const currentLibrary = (await storage.get<VocabularyItem[]>('memoralink_library')) || [];
     
-    if (!library.some(i => i.word === item.word)) {
-      library = [item, ...library];
-      localStorage.setItem('memoralink_library', JSON.stringify(library));
+    if (!currentLibrary.some(i => i.word === item.word)) {
+      const newLibrary = [item, ...currentLibrary];
+      await storage.set('memoralink_library', newLibrary);
       setSavedWords(prev => new Set(prev).add(item.word));
     }
   };
@@ -194,7 +195,6 @@ export const VocabularyBuilder: React.FC<VocabularyBuilderProps> = ({ aiProvider
                   <h3 className="text-xl font-bold text-slate-900 mb-1">{item.word}</h3>
                   <div className="flex items-center gap-2 flex-wrap">
                     <button onClick={(e) => handleSpeak(item.word, e)} className="p-1 text-slate-400 hover:text-indigo-600"><Volume2 className="w-4 h-4" /></button>
-                    {/* Updated Tag Styling: White Text */}
                     {item.tags?.map((tag, i) => (
                       <span key={i} className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded uppercase font-bold tracking-wide shadow-sm">
                         {tag}

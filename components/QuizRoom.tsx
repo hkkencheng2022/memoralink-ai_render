@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { VocabularyItem, AiProvider } from '../types';
 import { analyzeWriting, createChatSession } from '../services/geminiService';
+import { storage } from '../services/storage';
 import { BrainCircuit, Loader2, CheckCircle2, Bookmark, ArrowRight, RefreshCw, AlertCircle, BookOpen, Check, Volume2, Mic, MicOff } from 'lucide-react';
 
 interface QuizRoomProps {
@@ -21,16 +22,18 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ aiProvider }) => {
   const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('memoralink_library');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setLibrary(parsed);
-        setSavedWords(new Set(parsed.map((i: any) => i.word)));
+    const loadLibrary = async () => {
+      try {
+        const saved = await storage.get<VocabularyItem[]>('memoralink_library');
+        if (saved) {
+          setLibrary(saved);
+          setSavedWords(new Set(saved.map((i: any) => i.word)));
+        }
+      } catch (e) {
+        console.error("Failed to load library for quiz", e);
       }
-    } catch (e) {
-      console.error("Failed to load library for quiz", e);
-    }
+    };
+    loadLibrary();
   }, []);
 
   const toggleWord = (word: VocabularyItem) => {
@@ -41,13 +44,12 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ aiProvider }) => {
     }
   };
 
-  const handleSaveWord = (item: VocabularyItem) => {
-    const currentStorage = localStorage.getItem('memoralink_library');
-    let library: VocabularyItem[] = currentStorage ? JSON.parse(currentStorage) : [];
+  const handleSaveWord = async (item: VocabularyItem) => {
+    const currentLibrary = (await storage.get<VocabularyItem[]>('memoralink_library')) || [];
     
-    if (!library.some(i => i.word === item.word)) {
-      library = [item, ...library];
-      localStorage.setItem('memoralink_library', JSON.stringify(library));
+    if (!currentLibrary.some(i => i.word === item.word)) {
+      const newLibrary = [item, ...currentLibrary];
+      await storage.set('memoralink_library', newLibrary);
       setSavedWords(prev => new Set(prev).add(item.word));
     }
   };

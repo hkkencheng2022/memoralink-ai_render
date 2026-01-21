@@ -1,7 +1,7 @@
 
-// Import React to fix namespace errors
 import React, { useState, useEffect } from 'react';
 import { analyzeWriting } from '../services/geminiService';
+import { storage } from '../services/storage';
 import { Loader2, CheckCircle2, ArrowRight, PenTool, BookOpen, Bookmark, Check, Volume2, Save, AlertCircle } from 'lucide-react';
 import { AiProvider, VocabularyItem, WritingEntry } from '../types';
 
@@ -24,11 +24,13 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
   const [isAnalysisSaved, setIsAnalysisSaved] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('memoralink_library');
-    if (saved) {
-      const parsed = JSON.parse(saved) as VocabularyItem[];
-      setSavedWords(new Set(parsed.map(i => i.word)));
-    }
+    const loadSaved = async () => {
+       const saved = await storage.get<VocabularyItem[]>('memoralink_library');
+       if (saved) {
+         setSavedWords(new Set(saved.map(i => i.word)));
+       }
+    };
+    loadSaved();
   }, []);
 
   const handleAnalyze = async () => {
@@ -48,18 +50,17 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
     }
   };
 
-  const handleSaveWord = (item: VocabularyItem) => {
-    const currentStorage = localStorage.getItem('memoralink_library');
-    let library: VocabularyItem[] = currentStorage ? JSON.parse(currentStorage) : [];
+  const handleSaveWord = async (item: VocabularyItem) => {
+    const currentLibrary = (await storage.get<VocabularyItem[]>('memoralink_library')) || [];
     
-    if (!library.some(i => i.word === item.word)) {
-      library = [item, ...library];
-      localStorage.setItem('memoralink_library', JSON.stringify(library));
+    if (!currentLibrary.some(i => i.word === item.word)) {
+      const newLibrary = [item, ...currentLibrary];
+      await storage.set('memoralink_library', newLibrary);
       setSavedWords(prev => new Set(prev).add(item.word));
     }
   };
 
-  const handleSaveAnalysis = () => {
+  const handleSaveAnalysis = async () => {
     if (!result) return;
     
     const entry: WritingEntry = {
@@ -72,10 +73,9 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
       date: new Date().toLocaleDateString()
     };
 
-    const currentStorage = localStorage.getItem('memoralink_writing_library');
-    let library: WritingEntry[] = currentStorage ? JSON.parse(currentStorage) : [];
-    library = [entry, ...library];
-    localStorage.setItem('memoralink_writing_library', JSON.stringify(library));
+    const currentLibrary = (await storage.get<WritingEntry[]>('memoralink_writing_library')) || [];
+    const newLibrary = [entry, ...currentLibrary];
+    await storage.set('memoralink_writing_library', newLibrary);
     setIsAnalysisSaved(true);
   };
 
