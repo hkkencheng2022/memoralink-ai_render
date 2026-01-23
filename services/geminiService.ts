@@ -168,12 +168,12 @@ export const generateVocabularyByTopic = async (
   Task: Provide ${count} words. 
   Output Format: Return ONLY a raw JSON array of objects.
   Required Keys for each object:
-  - "word": The vocabulary word.
+  - "word": The vocabulary word (English).
   - "phonetic": IPA pronunciation.
   - "definition": English definition.
   - "chineseTranslation": Traditional Chinese translation (繁體中文).
-  - "exampleSentence": A clear sentence using the word in context.
-  - "mnemonic": A vivid, funny, or weird story to help remember the word.
+  - "exampleSentence": A clear sentence using the word in context (English).
+  - "mnemonic": A vivid, funny, or weird story to help remember the word (Traditional Chinese).
   - "context": Brief usage context (e.g., Formal, Slang).
   - "tags": Array of related keywords (e.g., ["Business", "Verb"]).`;
 
@@ -193,10 +193,33 @@ export const analyzeWriting = async (
   context: string,
   provider: AiProvider
 ): Promise<any> => {
-  const sys = `Task: 1. Correct grammar. 2. Suggest a native version. 3. Provide 2-3 key vocabulary words with mnemonics.
-    IMPORTANT: Return the response strictly as a JSON object with keys: correction, explanation, improvedVersion, keyVocabulary (array of objects with word, definition, mnemonic, phonetic, chineseTranslation, exampleSentence, tags).
-    All explanations and translations must be in Traditional Chinese (繁體中文) where applicable.`;
-  const prompt = `Context: ${context}. Text to analyze: "${text}". Output in Traditional Chinese (繁體中文).`;
+  const sys = `You are an expert English writing coach.
+  Task: 
+  1. Correct grammar (Return in English).
+  2. Suggest a native English speaker version (Return in English).
+  3. Provide a detailed explanation of errors and improvements in Traditional Chinese (繁體中文).
+  4. Suggest 2-3 key vocabulary words with mnemonics.
+
+  IMPORTANT: Return the response strictly as a valid JSON object.
+  JSON Schema Structure:
+  {
+    "correction": "The corrected text in English",
+    "improvedVersion": "The native-sounding version in English",
+    "explanation": "Detailed explanation in Traditional Chinese (繁體中文)",
+    "keyVocabulary": [
+      {
+        "word": "English word",
+        "definition": "English definition",
+        "mnemonic": "Memory aid in Traditional Chinese",
+        "phonetic": "IPA",
+        "chineseTranslation": "Traditional Chinese translation",
+        "exampleSentence": "English example sentence",
+        "tags": ["Tag1", "Tag2"]
+      }
+    ]
+  }`;
+  
+  const prompt = `Context: ${context}. Text to analyze: "${text}".`;
 
   if (provider === 'deepseek') {
     const resText = await callDeepSeek(prompt, sys);
@@ -213,9 +236,9 @@ export const analyzeWriting = async (
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          correction: { type: Type.STRING },
-          explanation: { type: Type.STRING },
-          improvedVersion: { type: Type.STRING },
+          correction: { type: Type.STRING, description: "Corrected text in English" },
+          explanation: { type: Type.STRING, description: "Explanation in Traditional Chinese" },
+          improvedVersion: { type: Type.STRING, description: "Native speaker version in English" },
           keyVocabulary: {
             type: Type.ARRAY,
             items: {
