@@ -162,18 +162,20 @@ export const Library: React.FC = () => {
     if (items.length === 0) return;
     
     // Add BOM (\uFEFF) so Excel opens it with correct UTF-8 encoding
+    // STRICTLY Text only columns: Word, Definition, Chinese Note, Mnemonic, Example
     let csvContent = "\uFEFFWord;Definition;Chinese註解;Mnemonic;Example\n";
     
     items.forEach(item => {
       // Helper to escape quotes within the text
       const clean = (s: string) => `"${(s || '').replace(/"/g, '""')}"`;
       
+      // EXPLICITLY excluding item.image or any base64 data
       csvContent += `${clean(item.word)};${clean(item.definition)};${clean(item.chineseTranslation)};${clean(item.mnemonic)};${clean(item.exampleSentence)}\n`;
     });
 
     const link = document.createElement("a");
     link.href = encodeURI("data:text/csv;charset=utf-8," + csvContent);
-    link.download = "memoralink_export.csv";
+    link.download = "memoralink_vocab_export.csv";
     link.click();
   };
 
@@ -285,7 +287,7 @@ export const Library: React.FC = () => {
            <button onClick={handleClearAll} className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold border border-red-200 flex items-center gap-2 hover:bg-red-100 transition-colors"><Trash2 className="w-4 h-4" /> Clear All</button>
 
            {activeTab === 'vocabulary' && (
-             <button onClick={handleExportCSV} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-2"><Download className="w-4 h-4" /> CSV</button>
+             <button onClick={handleExportCSV} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-2"><Download className="w-4 h-4" /> CSV (No Images)</button>
            )}
         </div>
       </div>
@@ -388,12 +390,18 @@ export const Library: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
+           {writingItems.length === 0 && (
+             <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+               <p>No writing logs saved yet.</p>
+               <p className="text-sm">Go to Writing Lab to save your first analysis!</p>
+             </div>
+           )}
            {writingItems.map(entry => (
              <div key={entry.id} className="bg-white rounded-xl p-4 border shadow-sm">
                 <div className="flex justify-between items-center cursor-pointer" onClick={() => { const n = new Set(expandedWriting); if(n.has(entry.id)) n.delete(entry.id); else n.add(entry.id); setExpandedWriting(n); }}>
                    <div>
-                     <span className="text-xs font-bold bg-slate-100 px-2 py-0.5 rounded">{entry.context}</span>
-                     <p className="text-sm font-medium mt-1">{entry.originalText}</p>
+                     <span className="text-xs font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-700">{entry.context}</span>
+                     <p className="text-sm font-medium mt-1">{entry.originalText.substring(0, 60)}{entry.originalText.length > 60 ? '...' : ''}</p>
                    </div>
                    {expandedWriting.has(entry.id) ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                 </div>
@@ -403,7 +411,8 @@ export const Library: React.FC = () => {
                         <div><p className="text-xs font-bold text-slate-500">Original</p><p className="text-sm">{entry.originalText}</p></div>
                         <div><p className="text-xs font-bold text-indigo-600">Improved</p><p className="text-sm text-indigo-800 italic">{entry.improvedVersion}</p></div>
                      </div>
-                     <div><p className="text-xs font-bold text-emerald-600">Correction</p><p className="text-sm">{entry.explanation}</p></div>
+                     <div><p className="text-xs font-bold text-emerald-600">Correction & Feedback</p><p className="text-sm whitespace-pre-wrap">{entry.explanation}</p></div>
+                     <div className="text-xs text-slate-400 text-right">{entry.date}</div>
                   </div>
                 )}
              </div>

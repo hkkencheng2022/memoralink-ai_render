@@ -11,13 +11,18 @@ interface WritingLabProps {
 
 export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
   const [text, setText] = useState('');
-  const [context, setContext] = useState('Professional Work Email');
+  
+  // Context management
+  const [contextPreset, setContextPreset] = useState('Professional Work Email');
+  const [customContext, setCustomContext] = useState('');
+  
   const [result, setResult] = useState<{ 
     correction: string, 
     explanation: string, 
     improvedVersion: string,
     keyVocabulary?: VocabularyItem[]
   } | null>(null);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
@@ -33,14 +38,26 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
     loadSaved();
   }, []);
 
+  // Helper to determine the actual context string sent to AI and saved
+  const getEffectiveContext = () => {
+    return contextPreset === 'Custom' ? customContext : contextPreset;
+  };
+
   const handleAnalyze = async () => {
     if (!text.trim()) return;
+    const activeContext = getEffectiveContext();
+    if (!activeContext.trim()) {
+      setError("Please define your custom scenario before analyzing.");
+      return;
+    }
+
     setLoading(true);
     setResult(null);
     setError(null);
     setIsAnalysisSaved(false);
+    
     try {
-      const analysis = await analyzeWriting(text, context, aiProvider);
+      const analysis = await analyzeWriting(text, activeContext, aiProvider);
       setResult(analysis);
     } catch (e: any) {
       console.error(e);
@@ -63,13 +80,16 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
   const handleSaveAnalysis = async () => {
     if (!result) return;
     
+    // Ensure we save the specific custom text if Custom is selected
+    const savedContext = getEffectiveContext();
+
     const entry: WritingEntry = {
       id: Date.now().toString(),
       originalText: text,
       correction: result.correction,
       improvedVersion: result.improvedVersion,
       explanation: result.explanation,
-      context: context,
+      context: savedContext,
       date: new Date().toLocaleDateString()
     };
 
@@ -103,17 +123,31 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
         <div className="space-y-4 flex flex-col h-full">
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
-            <label className="block text-sm font-medium text-slate-700 mb-2">Context</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Context / Scenario</label>
             <select 
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              className="w-full p-2 mb-4 rounded-lg border border-slate-300 bg-slate-50 text-sm"
+              value={contextPreset}
+              onChange={(e) => setContextPreset(e.target.value)}
+              className="w-full p-2 mb-3 rounded-lg border border-slate-300 bg-slate-50 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
             >
               <option>Professional Work Email</option>
               <option>Academic Essay</option>
               <option>Casual Message</option>
               <option>Daily Journal</option>
+              <option value="Custom">Custom Scenario...</option>
             </select>
+
+            {contextPreset === 'Custom' && (
+              <div className="mb-4 animate-in fade-in slide-in-from-top-2">
+                <input 
+                  type="text"
+                  value={customContext}
+                  onChange={(e) => setCustomContext(e.target.value)}
+                  placeholder="E.g., Complaint letter to landlord, Love letter, Asking for a refund..."
+                  className="w-full p-2 rounded-lg border border-indigo-200 bg-indigo-50 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  autoFocus
+                />
+              </div>
+            )}
             
             <label className="block text-sm font-medium text-slate-700 mb-2">Your Draft</label>
             <textarea 
