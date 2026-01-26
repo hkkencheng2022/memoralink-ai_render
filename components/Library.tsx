@@ -1,422 +1,417 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { VocabularyItem, WritingEntry } from '../types';
-import { storage } from '../services/storage';
-import { Trash2, Eye, Search, Volume2, Download, ChevronDown, ChevronUp, Upload, FileJson, Edit3, X, Check, Image as ImageIcon, Maximize2, Loader2 } from 'lucide-react';
+import { VocabularyItem, WritingEntry, ClassicalEntry } from '../types';
+import { storageService } from '../services/storageService';
+import { Trash2, Eye, Search, Download, ChevronDown, ChevronUp, Upload, FileJson, Edit3, X, Check, Image, Maximize2, AlertTriangle } from 'lucide-react';
 
-type LibraryTab = 'vocabulary' | 'writing';
+type LibraryTab = 'vocabulary' | 'writing' | 'classical';
 
 export const Library: React.FC = () => {
   const [activeTab, setActiveTab] = useState<LibraryTab>('vocabulary');
   
-  // Vocabulary State
   const [items, setItems] = useState<VocabularyItem[]>([]);
+  const [writingItems, setWritingItems] = useState<WritingEntry[]>([]);
+  const [classicalItems, setClassicalItems] = useState<ClassicalEntry[]>([]); 
+  
   const [revealedCards, setRevealedCards] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLoadingData, setIsLoadingData] = useState(true);
-
-  // Editing State
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [tempTags, setTempTags] = useState('');
+  const [expandedItem, setExpandedItem] = useState<Set<string>>(new Set());
 
-  // Focus/Zoom Mode State
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  // Focus Mode State
+  const [focusItem, setFocusItem] = useState<VocabularyItem | null>(null);
 
-  // Writing Log State
-  const [writingItems, setWritingItems] = useState<WritingEntry[]>([]);
-  const [expandedWriting, setExpandedWriting] = useState<Set<string>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Refs for File Inputs
-  const fileInputRef = useRef<HTMLInputElement>(null); // For JSON restore
-  const imageInputRef = useRef<HTMLInputElement>(null); // For Image upload
-  const uploadTargetIndex = useRef<number | null>(null);
+  useEffect(() => { loadData(); }, []);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setIsLoadingData(true);
-    try {
-      const savedVocab = await storage.get<VocabularyItem[]>('memoralink_library');
-      if (savedVocab) setItems(savedVocab);
-      
-      const savedWriting = await storage.get<WritingEntry[]>('memoralink_writing_library');
-      if (savedWriting) setWritingItems(savedWriting);
-    } catch(e) {
-      console.error("Failed to load library", e);
-    } finally {
-      setIsLoadingData(false);
-    }
+  const loadData = () => {
+    setItems(storageService.getVocabulary());
+    setWritingItems(storageService.getWritingLogs());
+    setClassicalItems(storageService.getClassicalLogs());
   };
 
   const handleBackupData = () => {
-    const backupData = { version: 1, date: new Date().toISOString(), vocabulary: items, writingLogs: writingItems };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
-    const a = document.createElement('a');
-    a.href = dataStr;
-    a.download = `memoralink_backup.json`;
-    a.click();
+    try {
+      const blob = storageService.createBackup();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a'); 
+      a.href = url; 
+      a.download = `memoralink_chinese_sys_backup_${new Date().toISOString().slice(0,10)}.json`; 
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Backup failed", e);
+      alert("備份失敗：資料量可能過大，導致瀏覽器無法生成檔案。");
+    }
   };
 
-  const handleRestoreClick = () => fileInputRef.current?.click();
+  const handleRestoreClick = () => {
+    if (fileInputRef.current) {
+        fileInputRef.current.value = ''; 
+        fileInputRef.current.click();
+    }
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; if (!file) return;
     
+    // Pre-check file size (5MB limit is typical for localStorage)
+    if (file.size > 5 * 1024 * 1024) {
+       alert("⚠️ 警告：此備份檔案超過 5MB，超出瀏覽器儲存上限，無法還原。");
+       return;
+    }
+
     const reader = new FileReader();
-    reader.onload = async (e) => {
+    reader.onload = (e) => {
       try {
-        setIsLoadingData(true);
-        const data = JSON.parse(e.target?.result as string);
+        const result = e.target?.result as string;
+        const data = JSON.parse(result);
         
-        if (data.vocabulary) {
-          await storage.set('memoralink_library', data.vocabulary);
-          setItems(data.vocabulary);
-        }
-        if (data.writingLogs) {
-          await storage.set('memoralink_writing_library', data.writingLogs);
-          setWritingItems(data.writingLogs);
-        }
+        storageService.restoreBackup(data);
+        loadData();
+        alert("資料已成功還原！");
         
-        alert(`Restore successful! Loaded ${data.vocabulary?.length || 0} words.`);
-      } catch (error) { 
+      } catch (error: any) { 
         console.error(error);
-        alert("Invalid file or restore failed."); 
-      } finally {
-        setIsLoadingData(false);
-        // Clear input
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        alert(error.message || "無效的備份檔案或檔案格式錯誤。"); 
       }
     };
     reader.readAsText(file);
   };
 
-  // --- Image Upload Logic ---
-  const triggerImageUpload = (index: number) => {
-    uploadTargetIndex.current = index;
-    imageInputRef.current?.click();
+  // Clear All Data Logic
+  const handleClearAllData = () => {
+    if (confirm('⚠️ 警告：此動作將「永久刪除」所有詞彙卡、寫作紀錄及文言文解析資料。\n\n您確定要清空所有資料嗎？')) {
+        if (confirm('再次確認：刪除後無法復原。真的要全部刪除嗎？')) {
+            storageService.clearAllData();
+            loadData();
+            alert('所有資料已清除。');
+        }
+    }
   };
 
-  const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || uploadTargetIndex.current === null) return;
+  // Image Upload Logic for Vocabulary Cards
+  const handleImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    // Warning for very large images, though IDB can handle them better than LocalStorage
-    if (file.size > 5000000) { // 5MB warning
-       if (!confirm("This image is quite large (>5MB). It may slow down loading. Continue?")) return;
+    if (file.size > 500 * 1024) {
+      alert("為節省空間，圖片大小限制為 500KB 以下。建議先壓縮圖片。");
+      return;
     }
 
     const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64String = e.target?.result as string;
-      const newItems = [...items];
-      newItems[uploadTargetIndex.current!] = {
-        ...newItems[uploadTargetIndex.current!],
-        image: base64String
-      };
-      setItems(newItems);
-      await storage.set('memoralink_library', newItems);
-      
-      // Reset input
-      if (imageInputRef.current) imageInputRef.current.value = '';
-      uploadTargetIndex.current = null;
+    reader.onloadend = () => {
+      try {
+          const base64 = reader.result as string;
+          const newItems = [...items];
+          newItems[index].image = base64;
+          
+          storageService.saveVocabulary(newItems);
+          setItems(newItems);
+      } catch (e: any) {
+          alert(e.message || "儲存圖片時發生錯誤。");
+      }
     };
     reader.readAsDataURL(file);
   };
 
-  // --- Vocabulary Logic ---
-  const handleDeleteVocab = async (index: number) => {
-    if (confirm('Remove this word?')) {
-      const newItems = items.filter((_, i) => i !== index);
-      setItems(newItems);
-      await storage.set('memoralink_library', newItems);
-    }
-  };
-  
-  const handleClearAll = async () => {
-    if (confirm("⚠️ WARNING: Are you sure you want to delete ALL data from your library? This action cannot be undone.")) {
-      setItems([]);
-      setWritingItems([]);
-      setRevealedCards(new Set());
-      await storage.clearAll();
+  const handleDelete = (index: number, type: LibraryTab) => {
+    if (!confirm('確定刪除此項目？')) return;
+    
+    if (type === 'vocabulary') {
+      const n = items.filter((_, i) => i !== index); 
+      storageService.saveVocabulary(n);
+      setItems(n);
+      if (focusItem && items[index] === focusItem) setFocusItem(null);
+    } else if (type === 'writing') {
+       const n = writingItems.filter((_, i) => i !== index); 
+       storageService.saveWritingLogs(n);
+       setWritingItems(n);
+    } else {
+       const n = classicalItems.filter((_, i) => i !== index); 
+       storageService.saveClassicalLogs(n);
+       setClassicalItems(n);
     }
   };
 
-  // Edit Tags
-  const startEditing = (index: number, tags: string[] = []) => {
-    setEditingIndex(index);
-    setTempTags(tags.join(', '));
-  };
-
-  const saveTags = async (index: number) => {
+  const startEditing = (index: number, tags: string[] = []) => { setEditingIndex(index); setTempTags(tags.join(', ')); };
+  const saveTags = (index: number) => {
     const newItems = [...items];
-    const tagsArray = tempTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
-    newItems[index].tags = tagsArray;
+    newItems[index].tags = tempTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+    storageService.saveVocabulary(newItems);
     setItems(newItems);
-    await storage.set('memoralink_library', newItems);
     setEditingIndex(null);
   };
 
   const handleExportCSV = () => {
     if (items.length === 0) return;
-    
-    // Add BOM (\uFEFF) so Excel opens it with correct UTF-8 encoding
-    // STRICTLY Text only columns: Word, Definition, Chinese Note, Mnemonic, Example
-    let csvContent = "\uFEFFWord;Definition;Chinese註解;Mnemonic;Example\n";
-    
+    let csvContent = "\uFEFF詞彙;釋義;翻譯/備註;記憶法;例句\n";
     items.forEach(item => {
-      // Helper to escape quotes within the text
       const clean = (s: string) => `"${(s || '').replace(/"/g, '""')}"`;
-      
-      // EXPLICITLY excluding item.image or any base64 data
       csvContent += `${clean(item.word)};${clean(item.definition)};${clean(item.chineseTranslation)};${clean(item.mnemonic)};${clean(item.exampleSentence)}\n`;
     });
-
-    const link = document.createElement("a");
-    link.href = encodeURI("data:text/csv;charset=utf-8," + csvContent);
-    link.download = "memoralink_vocab_export.csv";
-    link.click();
+    const link = document.createElement("a"); link.href = encodeURI("data:text/csv;charset=utf-8," + csvContent); link.download = "memoralink_chinese_vocab.csv"; link.click();
   };
 
-  const filteredItems = items.filter(item => 
-    item.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.definition.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.chineseTranslation.includes(searchTerm) ||
-    (item.tags && item.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())))
-  );
-
-  const handleSpeak = (text: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
+  const handleSpeak = (text: string, lang: 'zh-CN' | 'zh-HK' = 'zh-HK') => {
     if ('speechSynthesis' in window) {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang='en-US'; 
-      window.speechSynthesis.speak(u); 
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang; 
+
+      const voices = window.speechSynthesis.getVoices();
+      const targetVoice = voices.find(v => 
+        v.lang.replace('_', '-').toLowerCase() === lang.toLowerCase() || 
+        (lang === 'zh-HK' && (v.name.includes('Cantonese') || v.name.includes('Hong Kong')))
+      );
+
+      if (targetVoice) {
+        utterance.voice = targetVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
     }
   };
 
-  // --- Focus Modal Content ---
-  const focusedItem = focusedIndex !== null ? filteredItems[focusedIndex] : null;
-
-  if (isLoadingData) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        <span className="ml-2 text-slate-600">Loading Library...</span>
-      </div>
-    );
-  }
+  const filteredVocab = items.filter(item => {
+    if (!item) return false;
+    const s = searchTerm.toLowerCase();
+    const w = (item.word || '').toLowerCase();
+    const d = (item.definition || '').toLowerCase();
+    const t = item.tags && Array.isArray(item.tags) ? item.tags : [];
+    
+    return w.includes(s) || d.includes(s) || t.some(tag => (tag || '').toLowerCase().includes(s));
+  });
+  
+  const toggleExpand = (id: string) => { const n = new Set(expandedItem); if(n.has(id)) n.delete(id); else n.add(id); setExpandedItem(n); };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 pb-24 md:pb-8">
+    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 pb-24 md:pb-8">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
-      <input type="file" ref={imageInputRef} onChange={handleImageFileChange} accept="image/*" className="hidden" />
       
-      {/* Focus Modal */}
-      {focusedItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/95 flex items-center justify-center p-4 animate-in fade-in duration-200">
-           <button 
-             onClick={() => setFocusedIndex(null)} 
-             className="absolute top-4 right-4 z-50 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
-           >
-             <X className="w-6 h-6" />
-           </button>
-
-           <div className="w-full max-w-6xl h-[90vh] bg-white rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl">
-              {/* Image Section (2/3) */}
-              <div className="w-full md:w-2/3 bg-black relative flex items-center justify-center h-1/2 md:h-full">
-                 {focusedItem.image ? (
-                   <img src={focusedItem.image} alt={focusedItem.word} className="w-full h-full object-contain" />
-                 ) : (
-                   <div className="flex flex-col items-center justify-center text-white/30 gap-4">
-                      <ImageIcon className="w-24 h-24 opacity-50" />
-                      <span className="text-lg font-medium">No image uploaded</span>
-                   </div>
-                 )}
-              </div>
-
-              {/* Text Section (1/3) */}
-              <div className="w-full md:w-1/3 h-1/2 md:h-full bg-white p-8 md:p-10 overflow-y-auto flex flex-col relative">
-                 <div className="mb-8">
-                    <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-full uppercase tracking-wider mb-4">
-                      {focusedItem.tags?.[0] || 'Vocabulary'}
-                    </span>
-                    <h2 className="text-4xl md:text-5xl font-black text-slate-900 mb-2">{focusedItem.word}</h2>
-                    <div className="flex items-center gap-3">
-                       <span className="text-xl text-slate-500 font-mono">{focusedItem.phonetic}</span>
-                       <button onClick={(e) => handleSpeak(focusedItem.word, e)} className="p-2 bg-slate-100 rounded-full hover:bg-indigo-100 text-indigo-600 transition-colors">
-                         <Volume2 className="w-5 h-5" />
-                       </button>
-                    </div>
-                 </div>
-
-                 <div className="space-y-8 flex-1">
-                    <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100">
-                       <span className="text-xs font-bold text-amber-700 uppercase tracking-wider block mb-2">🧠 Memory Hook</span>
-                       <p className="text-xl text-amber-900 font-medium italic leading-relaxed">"{focusedItem.mnemonic}"</p>
-                    </div>
-
-                    <div className="space-y-4">
-                       <div>
-                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-1">Definition</h3>
-                         <p className="text-lg font-medium text-slate-800">{focusedItem.definition}</p>
-                       </div>
-                       
-                       <div>
-                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-1">Translation</h3>
-                         <p className="text-lg text-slate-700">{focusedItem.chineseTranslation}</p>
-                       </div>
-
-                       <div>
-                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-1">Example</h3>
-                         <p className="text-indigo-900 italic">"{focusedItem.exampleSentence}"</p>
-                       </div>
-                    </div>
-                 </div>
-              </div>
-           </div>
-        </div>
-      )}
-
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div><h2 className="text-2xl font-bold text-slate-900">My Library</h2></div>
-        <div className="flex flex-wrap items-center gap-2">
-           <button onClick={handleBackupData} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 flex items-center gap-2"><FileJson className="w-4 h-4" /> Backup</button>
-           <button onClick={handleRestoreClick} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 flex items-center gap-2"><Upload className="w-4 h-4" /> Restore</button>
-           
-           <button onClick={handleClearAll} className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold border border-red-200 flex items-center gap-2 hover:bg-red-100 transition-colors"><Trash2 className="w-4 h-4" /> Clear All</button>
-
-           {activeTab === 'vocabulary' && (
-             <button onClick={handleExportCSV} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 flex items-center gap-2"><Download className="w-4 h-4" /> CSV (No Images)</button>
-           )}
+        <h2 className="text-2xl font-bold text-slate-900">我的資料庫</h2>
+        <div className="flex flex-wrap gap-2">
+           <button onClick={handleBackupData} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 hover:bg-indigo-100 transition-colors"><FileJson className="w-4 h-4 inline mr-1" /> 備份</button>
+           <button onClick={handleRestoreClick} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 hover:bg-indigo-100 transition-colors"><Upload className="w-4 h-4 inline mr-1" /> 還原</button>
+           <button onClick={handleClearAllData} className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold border border-red-200 hover:bg-red-100 hover:text-red-700 transition-colors"><Trash2 className="w-4 h-4 inline mr-1" /> 全部刪除</button>
+           {activeTab === 'vocabulary' && <button onClick={handleExportCSV} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors"><Download className="w-4 h-4 inline mr-1" /> CSV</button>}
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-        <input type="text" placeholder="Search words or tags..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200 overflow-x-auto">
+         <button onClick={() => setActiveTab('vocabulary')} className={`px-6 py-3 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'vocabulary' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>詞彙卡 ({items.length})</button>
+         <button onClick={() => setActiveTab('classical')} className={`px-6 py-3 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'classical' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>文言文解析 ({classicalItems.length})</button>
+         <button onClick={() => setActiveTab('writing')} className={`px-6 py-3 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'writing' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>寫作紀錄 ({writingItems.length})</button>
       </div>
 
-      <div className="flex border-b border-slate-200">
-         <button onClick={() => setActiveTab('vocabulary')} className={`px-6 py-3 font-medium text-sm border-b-2 ${activeTab === 'vocabulary' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Vocabulary Cards</button>
-         <button onClick={() => setActiveTab('writing')} className={`px-6 py-3 font-medium text-sm border-b-2 ${activeTab === 'writing' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Writing Logs</button>
-      </div>
-
-      {activeTab === 'vocabulary' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredItems.map((item, index) => (
-            <div key={index} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative group flex flex-col gap-4">
-              
-              {/* Image Area (16:9) */}
-              <div 
-                className="w-full aspect-video bg-slate-100 rounded-lg overflow-hidden relative group/image cursor-pointer border border-slate-100"
-                onClick={() => setFocusedIndex(index)}
-              >
-                 {item.image ? (
-                   <>
-                     <img src={item.image} alt={item.word} className="w-full h-full object-cover" />
-                     {/* Overlay Actions */}
-                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setFocusedIndex(index); }} 
-                          className="p-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/40 transition-colors"
-                          title="Focus Mode"
-                        >
-                          <Maximize2 className="w-5 h-5" />
-                        </button>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); triggerImageUpload(index); }} 
-                          className="p-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/40 transition-colors"
-                          title="Change Image"
-                        >
-                          <ImageIcon className="w-5 h-5" />
-                        </button>
-                     </div>
-                   </>
-                 ) : (
-                   <button 
-                     onClick={(e) => { e.stopPropagation(); triggerImageUpload(index); }}
-                     className="w-full h-full flex flex-col items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-500 transition-colors gap-2"
-                   >
-                     <ImageIcon className="w-8 h-8 opacity-50" />
-                     <span className="text-xs font-medium">Add Visual Memory</span>
-                   </button>
-                 )}
-              </div>
-
-              <div className="space-y-3 flex-1">
+      {/* Vocabulary Tab */}
+      {activeTab === 'vocabulary' && (
+        <>
+          <div className="relative"><Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" /><input type="text" placeholder="搜尋詞彙或標籤 (Tag)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+          
+          {items.length === 0 ? (
+            <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+               <AlertTriangle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+               <p className="text-slate-500">暫無詞彙卡，請前往「詞彙生成」製作。</p>
+            </div>
+          ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredVocab.map((item, index) => (
+              <div key={index} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3 relative group flex flex-col h-full hover:shadow-md transition-shadow">
+                
+                {/* Header Row */}
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="text-xl font-bold text-slate-900 cursor-pointer hover:text-indigo-600" onClick={() => setFocusedIndex(index)}>{item.word}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                       <span className="text-xs text-slate-500 font-mono">{item.phonetic}</span>
-                       <button onClick={(e) => handleSpeak(item.word, e)} className="text-slate-400 hover:text-indigo-600"><Volume2 className="w-3 h-3" /></button>
+                    <div className="flex items-center gap-2 mb-1">
+                         <h3 className="text-lg font-bold">{item.word}</h3>
                     </div>
+                    {/* Speak Buttons */}
+                    <div className="flex gap-1 mb-1">
+                        <button onClick={(e) => { e.stopPropagation(); handleSpeak(item.word, 'zh-HK'); }} className="text-[10px] px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-600 rounded border border-slate-200 transition-colors">粵</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleSpeak(item.word, 'zh-CN'); }} className="text-[10px] px-1.5 py-0.5 bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-600 rounded border border-slate-200 transition-colors">普</button>
+                    </div>
+                    <span className="text-xs text-slate-500 font-mono block">{item.phonetic}</span>
                   </div>
                   <div className="flex gap-1">
-                     <button onClick={() => { const newS = new Set(revealedCards); if(newS.has(index)) newS.delete(index); else newS.add(index); setRevealedCards(newS); }} className="p-1.5 text-slate-400 hover:text-indigo-600"><Eye className="w-4 h-4" /></button>
-                     <button onClick={() => handleDeleteVocab(index)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                     <button onClick={() => setFocusItem(item)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors" title="專注模式"><Maximize2 className="w-4 h-4" /></button>
+                     <button onClick={() => { const newS = new Set(revealedCards); if(newS.has(index)) newS.delete(index); else newS.add(index); setRevealedCards(newS); }} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"><Eye className="w-4 h-4" /></button>
+                     <button onClick={() => handleDelete(index, 'vocabulary')} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
 
-                {/* Tag Section */}
+                {/* Image Thumbnail Area - UPDATED to 16:9 */}
+                <div className="relative group/image">
+                    {item.image ? (
+                        <div onClick={() => setFocusItem(item)} className="w-full aspect-video rounded-lg bg-slate-100 overflow-hidden cursor-pointer border border-slate-100 relative">
+                             <img src={item.image} alt={item.word} className="w-full h-full object-cover transition-transform hover:scale-105" />
+                             <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center">
+                                 <Maximize2 className="text-white opacity-0 hover:opacity-100 drop-shadow-md" />
+                             </div>
+                        </div>
+                    ) : (
+                        <label className="w-full h-12 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center gap-2 text-slate-400 text-xs cursor-pointer hover:border-indigo-300 hover:text-indigo-500 transition-colors">
+                            <Image className="w-4 h-4" /> 上傳助記圖片
+                            <input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(index, e)} />
+                        </label>
+                    )}
+                </div>
+
+                {/* Tags */}
                 <div className="flex flex-wrap gap-1 items-center min-h-[24px]">
                   {editingIndex === index ? (
-                    <div className="flex items-center gap-1 w-full animate-in fade-in">
-                      <input autoFocus value={tempTags} onChange={e => setTempTags(e.target.value)} className="flex-1 text-xs border p-1 rounded" placeholder="Tags (comma separated)" />
-                      <button onClick={() => saveTags(index)} className="text-indigo-600"><Check className="w-4 h-4" /></button>
-                      <button onClick={() => setEditingIndex(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
-                    </div>
+                    <div className="flex items-center gap-1 w-full"><input autoFocus value={tempTags} onChange={e => setTempTags(e.target.value)} className="flex-1 text-xs border p-1 rounded" /><button onClick={() => saveTags(index)} className="text-indigo-600"><Check className="w-4 h-4" /></button></div>
                   ) : (
-                    <>
-                      {item.tags?.map((t, i) => <span key={i} className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded font-bold uppercase">{t}</span>)}
-                      <button onClick={() => startEditing(index, item.tags)} className="text-slate-300 hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Edit Tags"><Edit3 className="w-3 h-3" /></button>
-                    </>
+                    <>{item.tags?.map((t, i) => <span key={i} className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded font-bold">{t}</span>)}<button onClick={() => startEditing(index, item.tags)} className="text-slate-300 hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"><Edit3 className="w-3 h-3" /></button></>
                   )}
                 </div>
 
-                <div className="bg-amber-50 p-2 rounded text-xs italic text-amber-900">"{item.mnemonic}"</div>
+                {/* Mnemonic - Always visible */}
+                <div className="bg-amber-50 p-2 rounded text-xs italic text-amber-900 border border-amber-100">"{item.mnemonic}"</div>
                 
-                {revealedCards.has(index) && (
-                  <div className="text-sm space-y-2 animate-in fade-in pt-2 border-t border-slate-100">
-                     <p className="font-medium text-slate-800">{item.definition}</p>
-                     <p className="text-slate-500 text-xs">{item.chineseTranslation}</p>
-                     <p className="text-indigo-700 bg-indigo-50 p-2 rounded text-xs border-l-2 border-indigo-400 italic">"{item.exampleSentence}"</p>
-                  </div>
-                )}
+                {/* Revealable Content */}
+                {revealedCards.has(index) && (<div className="text-sm space-y-1 animate-in fade-in"><p>{item.definition}</p><p className="text-indigo-700 bg-indigo-50 p-1.5 rounded text-xs border-l-2 border-indigo-400">"{item.exampleSentence}"</p></div>)}
               </div>
-            </div>
-          ))}
-        </div>
-      ) : (
+            ))}
+          </div>
+          )}
+        </>
+      )}
+
+      {/* Classical Tab & Writing Tab... (Unchanged visual logic, but using updated handleDelete/handlers) */}
+      {/* ... (Existing Classical & Writing Tabs UI code remains the same, just using new handlers) ... */}
+      
+      {activeTab === 'classical' && (
         <div className="space-y-4">
-           {writingItems.length === 0 && (
-             <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-               <p>No writing logs saved yet.</p>
-               <p className="text-sm">Go to Writing Lab to save your first analysis!</p>
-             </div>
-           )}
-           {writingItems.map(entry => (
+           {classicalItems.length === 0 && <div className="text-center text-slate-500 py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">暫無文言文紀錄</div>}
+           {classicalItems.map((entry, idx) => (
              <div key={entry.id} className="bg-white rounded-xl p-4 border shadow-sm">
-                <div className="flex justify-between items-center cursor-pointer" onClick={() => { const n = new Set(expandedWriting); if(n.has(entry.id)) n.delete(entry.id); else n.add(entry.id); setExpandedWriting(n); }}>
-                   <div>
-                     <span className="text-xs font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-700">{entry.context}</span>
-                     <p className="text-sm font-medium mt-1">{entry.originalText.substring(0, 60)}{entry.originalText.length > 60 ? '...' : ''}</p>
+                <div className="flex justify-between items-center cursor-pointer" onClick={() => toggleExpand(entry.id)}>
+                   <div className="flex-1 mr-4">
+                     <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">文言文</span>
+                     <p className="text-sm font-medium mt-1 truncate">{entry.originalText.substring(0, 50)}...</p>
                    </div>
-                   {expandedWriting.has(entry.id) ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                   <button onClick={(e) => { e.stopPropagation(); handleDelete(idx, 'classical'); }} className="text-slate-400 hover:text-red-500 p-2"><Trash2 className="w-4 h-4" /></button>
+                   {expandedItem.has(entry.id) ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                 </div>
-                {expandedWriting.has(entry.id) && (
+                {expandedItem.has(entry.id) && (
                   <div className="mt-4 pt-4 border-t space-y-3 bg-slate-50 p-3 rounded">
-                     <div className="grid md:grid-cols-2 gap-4">
-                        <div><p className="text-xs font-bold text-slate-500">Original</p><p className="text-sm">{entry.originalText}</p></div>
-                        <div><p className="text-xs font-bold text-indigo-600">Improved</p><p className="text-sm text-indigo-800 italic">{entry.improvedVersion}</p></div>
+                     <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <p className="text-xs font-bold text-slate-500">原文</p>
+                            <div className="flex gap-1 ml-2">
+                                <button onClick={(e) => { e.stopPropagation(); handleSpeak(entry.originalText, 'zh-HK'); }} className="text-[10px] px-1.5 border rounded hover:bg-slate-100">粵</button>
+                                <button onClick={(e) => { e.stopPropagation(); handleSpeak(entry.originalText, 'zh-CN'); }} className="text-[10px] px-1.5 border rounded hover:bg-slate-100">普</button>
+                            </div>
+                        </div>
+                        <p className="text-sm font-serif text-slate-800 leading-relaxed">{entry.originalText}</p>
                      </div>
-                     <div><p className="text-xs font-bold text-emerald-600">Correction & Feedback</p><p className="text-sm whitespace-pre-wrap">{entry.explanation}</p></div>
-                     <div className="text-xs text-slate-400 text-right">{entry.date}</div>
+                     <div><p className="text-xs font-bold text-indigo-600">白話翻譯</p><p className="text-sm">{entry.translation}</p></div>
+                     <div className="grid md:grid-cols-2 gap-4">
+                        <div><p className="text-xs font-bold text-amber-600">出處</p><p className="text-xs text-slate-600">{entry.origin}</p></div>
+                        <div><p className="text-xs font-bold text-emerald-600">現代應用</p><p className="text-xs text-slate-600">{entry.usage}</p></div>
+                     </div>
                   </div>
                 )}
              </div>
            ))}
+        </div>
+      )}
+
+      {activeTab === 'writing' && (
+        <div className="space-y-4">
+           {writingItems.length === 0 && <div className="text-center text-slate-500 py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">暫無寫作紀錄</div>}
+           {writingItems.map((entry, idx) => (
+             <div key={entry.id} className="bg-white rounded-xl p-4 border shadow-sm">
+                <div className="flex justify-between items-center cursor-pointer" onClick={() => toggleExpand(entry.id)}>
+                   <div className="flex-1 mr-4">
+                     <span className="text-xs font-bold bg-slate-100 px-2 py-0.5 rounded">{entry.context}</span>
+                     <p className="text-sm font-medium mt-1 truncate">{entry.originalText.substring(0, 50)}...</p>
+                   </div>
+                   <button onClick={(e) => { e.stopPropagation(); handleDelete(idx, 'writing'); }} className="text-slate-400 hover:text-red-500 p-2"><Trash2 className="w-4 h-4" /></button>
+                   {expandedItem.has(entry.id) ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                </div>
+                {expandedItem.has(entry.id) && (
+                  <div className="mt-4 pt-4 border-t space-y-3 bg-slate-50 p-3 rounded">
+                     <div className="grid md:grid-cols-2 gap-4">
+                        <div><p className="text-xs font-bold text-slate-500">原文</p><p className="text-sm">{entry.originalText}</p></div>
+                        <div><p className="text-xs font-bold text-indigo-600">潤飾版本</p><p className="text-sm text-indigo-800 italic">{entry.improvedVersion}</p></div>
+                     </div>
+                     <div><p className="text-xs font-bold text-emerald-600">修正說明</p><p className="text-sm">{entry.explanation}</p></div>
+                  </div>
+                )}
+             </div>
+           ))}
+        </div>
+      )}
+
+      {/* Focus Mode Modal */}
+      {focusItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-w-6xl w-full h-[90vh] relative">
+             <button 
+                onClick={() => setFocusItem(null)}
+                className="absolute top-4 right-4 z-10 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full transition-colors"
+             >
+                <X className="w-6 h-6" />
+             </button>
+
+             {/* Left: Image (2/3) */}
+             <div className="md:w-2/3 bg-black flex items-center justify-center p-4">
+                {focusItem.image ? (
+                    <img src={focusItem.image} alt={focusItem.word} className="w-full h-full object-contain" />
+                ) : (
+                    <div className="text-white/30 flex flex-col items-center">
+                        <Image className="w-16 h-16 mb-2" />
+                        <p>暫無圖片</p>
+                    </div>
+                )}
+             </div>
+
+             {/* Right: Info (1/3) */}
+             <div className="md:w-1/3 p-8 overflow-y-auto bg-white flex flex-col gap-6 border-l border-slate-100">
+                <div>
+                   <h2 className="text-4xl font-bold text-slate-900 mb-2">{focusItem.word}</h2>
+                   <div className="flex items-center gap-3">
+                      <span className="text-lg text-slate-500 font-mono bg-slate-100 px-2 py-0.5 rounded">{focusItem.phonetic}</span>
+                      <div className="flex gap-2">
+                         <button onClick={() => handleSpeak(focusItem.word, 'zh-HK')} className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition-colors text-xs font-bold">粵語</button>
+                         <button onClick={() => handleSpeak(focusItem.word, 'zh-CN')} className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full hover:bg-slate-100 transition-colors text-xs font-bold">普通話</button>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="space-y-2">
+                   <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">解釋</span>
+                   <p className="text-lg text-slate-800 leading-relaxed">{focusItem.definition}</p>
+                   {focusItem.chineseTranslation && <p className="text-slate-500">{focusItem.chineseTranslation}</p>}
+                </div>
+
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                   <span className="text-xs font-bold text-amber-700 uppercase tracking-widest block mb-2">記憶聯想</span>
+                   <p className="text-amber-900 italic leading-relaxed text-lg">{focusItem.mnemonic}</p>
+                </div>
+
+                <div className="space-y-2">
+                   <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">例句</span>
+                   <p className="text-indigo-900 bg-indigo-50 p-4 rounded-xl border-l-4 border-indigo-400 italic">"{focusItem.exampleSentence}"</p>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 pt-4 mt-auto border-t border-slate-100">
+                    {focusItem.tags?.map((tag, i) => (
+                        <span key={i} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{tag}</span>
+                    ))}
+                </div>
+             </div>
+          </div>
         </div>
       )}
     </div>
