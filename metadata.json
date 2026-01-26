@@ -1,6 +1,6 @@
 {
-  "name": "MemoraLink Chinese System_render",
-  "description": "AI-powered Chinese learning system for students and professionals (Classical & Modern).",
+  "name": "MemoraLink English AI in Render",
+  "description": "AI-powered English learning for users with memory difficulties.",
   "requestFramePermissions": [
     "microphone"
   ]

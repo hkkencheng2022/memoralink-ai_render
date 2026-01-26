@@ -7,17 +7,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     base: './',
-    server: {
-      host: true, // Exposes the app to your local network (0.0.0.0)
-      port: 3000, // specific port number
-      strictPort: false, // if 3000 is taken, it will try 3001
-      open: true, // automatically open the browser
-    },
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
       'process.env.DEEPSEEK_API_KEY': JSON.stringify(env.DEEPSEEK_API_KEY),
       'process.env.APP_PASSWORD': JSON.stringify(env.APP_PASSWORD),
-      'process.env.APP_PASSWORD_HINT': JSON.stringify(env.APP_PASSWORD_HINT),
     }
   };
 });

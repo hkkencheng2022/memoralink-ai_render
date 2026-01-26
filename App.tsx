@@ -8,116 +8,117 @@ import { WritingLab } from './components/WritingLab';
 import { OralCoach } from './components/OralCoach';
 import { Library } from './components/Library';
 import { QuizRoom } from './components/QuizRoom';
-import { ClassicalMode } from './components/ClassicalMode';
-import { Sparkles, Cpu, Lock, ArrowRight, BookOpen, HelpCircle } from 'lucide-react';
+import { Sparkles, Cpu, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 
-// Use environment variable or default to '8888'
-const APP_PASSWORD = process.env.APP_PASSWORD || '8888';
-const PASSWORD_HINT = process.env.APP_PASSWORD_HINT;
-const AUTH_KEY = 'memoralink_auth_token_v2'; // Updated key version
+// --- CONFIGURATION ---
+// Get password from environment variable or default to "8888"
+const APP_PASSWORD = process.env.APP_PASSWORD || "8888"; 
 
 export default function App() {
-  // Authentication State
-  // Logic: Check if the stored password matches the CURRENT environment password
+  // Auth State
+  // Logic Update: Instead of checking a boolean, we check if the stored password 
+  // matches the CURRENT APP_PASSWORD. If the developer changes APP_PASSWORD, 
+  // this check fails, and the user must re-login.
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    const storedAuth = localStorage.getItem(AUTH_KEY);
-    return storedAuth === APP_PASSWORD;
+    const storedPassword = localStorage.getItem('memoralink_saved_password');
+    return storedPassword === APP_PASSWORD;
   });
   
   const [passwordInput, setPasswordInput] = useState('');
-  const [authError, setAuthError] = useState(false);
+  const [loginError, setLoginError] = useState(false);
 
-  // App State
+  // App View State
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
   const [provider, setProvider] = useState<AiProvider>('deepseek');
 
-  const handleLogin = (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
     if (passwordInput === APP_PASSWORD) {
-      // Store the ACTUAL password value, not just 'true'
-      // This ensures that if APP_PASSWORD changes in .env, the stored value won't match, forcing re-login
-      localStorage.setItem(AUTH_KEY, APP_PASSWORD);
       setIsAuthenticated(true);
-      setAuthError(false);
+      // Save the verified password string to local storage
+      // This allows us to invalidate sessions later by simply changing APP_PASSWORD
+      localStorage.setItem('memoralink_saved_password', APP_PASSWORD);
+      setLoginError(false);
     } else {
-      setAuthError(true);
-      setPasswordInput('');
+      setLoginError(true);
+      // Shake animation effect could be added here
     }
   };
 
   const renderView = () => {
     switch (currentView) {
-      case AppView.DASHBOARD: return <Dashboard setView={setCurrentView} />;
-      case AppView.VOCABULARY: return <VocabularyBuilder aiProvider={provider} />;
-      case AppView.LIBRARY: return <Library />;
-      case AppView.WRITING: return <WritingLab aiProvider={provider} />;
-      case AppView.SPEAKING: return <OralCoach aiProvider={provider} />;
-      case AppView.QUIZ: return <QuizRoom aiProvider={provider} />;
-      case AppView.CLASSICAL: return <ClassicalMode aiProvider={provider} />;
-      default: return <Dashboard setView={setCurrentView} />;
+      case AppView.DASHBOARD:
+        return <Dashboard setView={setCurrentView} />;
+      case AppView.VOCABULARY:
+        return <VocabularyBuilder aiProvider={provider} />;
+      case AppView.LIBRARY:
+        return <Library />;
+      case AppView.WRITING:
+        return <WritingLab aiProvider={provider} />;
+      case AppView.SPEAKING:
+        return <OralCoach aiProvider={provider} />;
+      case AppView.QUIZ:
+        return <QuizRoom aiProvider={provider} />;
+      default:
+        return <Dashboard setView={setCurrentView} />;
     }
   };
 
-  // Login Screen Component
+  // --- LOGIN SCREEN RENDER ---
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-          <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 p-8 text-center">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-               <BookOpen className="w-8 h-8 text-white" />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+          <div className="bg-indigo-600 p-8 text-center">
+            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-white mb-1">文曲星 AI</h1>
-            <p className="text-indigo-200 text-sm tracking-widest uppercase">MemoraLink Chinese</p>
+            <h1 className="text-2xl font-bold text-white">MemoraLink AI</h1>
+            <p className="text-indigo-100 text-sm mt-2">Private English Learning Assistant</p>
           </div>
           
           <div className="p-8">
             <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-slate-400" />
-                  請輸入存取密碼
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Access Password
                 </label>
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   value={passwordInput}
-                  onChange={(e) => { setAuthError(false); setPasswordInput(e.target.value); }}
-                  placeholder="Password"
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    if(loginError) setLoginError(false);
+                  }}
+                  placeholder="Enter passcode..."
+                  className={`w-full p-3 rounded-xl border ${loginError ? 'border-red-300 bg-red-50 focus:ring-red-500' : 'border-slate-300 bg-slate-50 focus:ring-indigo-500'} outline-none focus:ring-2 transition-all`}
                   autoFocus
-                  className={`w-full p-3 rounded-xl border ${authError ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-slate-200 bg-slate-50 focus:ring-indigo-200'} outline-none focus:ring-4 transition-all`}
                 />
-                {authError && <p className="text-xs text-red-500 font-medium animate-pulse">密碼錯誤，請重試。</p>}
+                {loginError && (
+                  <div className="flex items-center gap-2 mt-2 text-red-600 text-sm animate-in slide-in-from-left-1">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Incorrect password</span>
+                  </div>
+                )}
               </div>
               
-              <button 
+              <button
                 type="submit"
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95"
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-200"
               >
-                進入系統 <ArrowRight className="w-4 h-4" />
+                Unlock App <ArrowRight className="w-4 h-4" />
               </button>
             </form>
-
-            {PASSWORD_HINT && (
-                <div className="mt-6 pt-4 border-t border-slate-100 flex justify-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-100">
-                        <HelpCircle className="w-3 h-3 text-slate-400" />
-                        <span className="text-xs text-slate-500">
-                            提示: <span className="font-medium text-indigo-600">{PASSWORD_HINT}</span>
-                        </span>
-                    </div>
-                </div>
-            )}
-            
-            <div className="mt-4 text-center">
-               <p className="text-[10px] text-slate-300">Restricted Access</p>
-            </div>
+            <p className="text-center text-xs text-slate-400 mt-6">
+              Protected for personal use. <br/>Login required when system updates.
+            </p>
           </div>
         </div>
       </div>
     );
   }
 
-  // Main App Interface
+  // --- MAIN APP RENDER ---
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Navigation currentView={currentView} setView={setCurrentView} />
@@ -127,22 +128,36 @@ export default function App() {
            <div className="flex items-center gap-2">
              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
              <h1 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
-               {currentView === AppView.CLASSICAL ? '文言文模式' : currentView.replace('_', ' ')}
+               {currentView.replace('_', ' ')}
              </h1>
            </div>
            
            <div className="flex items-center gap-3">
               <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                <button onClick={() => setProvider('deepseek')} className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${provider === 'deepseek' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>DEEPSEEK</button>
-                <button onClick={() => setProvider('gemini')} className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${provider === 'gemini' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>GEMINI</button>
+                <button 
+                  onClick={() => setProvider('deepseek')}
+                  className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${provider === 'deepseek' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  DEEPSEEK
+                </button>
+                <button 
+                  onClick={() => setProvider('gemini')}
+                  className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${provider === 'gemini' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  GEMINI
+                </button>
               </div>
+
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100">
                 {provider === 'gemini' ? <Sparkles className="w-4 h-4 text-indigo-600" /> : <Cpu className="w-4 h-4 text-indigo-600" />}
-                <span className="text-xs font-semibold text-indigo-700">{provider === 'gemini' ? 'Gemini AI' : 'DeepSeek AI'}</span>
+                <span className="text-xs font-semibold text-indigo-700">{provider === 'gemini' ? 'Gemini AI' : 'DeepSeek AI'} Active</span>
               </div>
            </div>
         </header>
-        <div className="flex-1">{renderView()}</div>
+
+        <div className="flex-1">
+          {renderView()}
+        </div>
       </main>
     </div>
   );
