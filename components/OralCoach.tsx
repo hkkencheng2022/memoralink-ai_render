@@ -5,10 +5,10 @@ import { Mic, MicOff, Send, Sparkles, ArrowRight } from 'lucide-react';
 import { AiProvider } from '../types';
 
 const SCENARIOS = [
-  { id: 'interview', title: '求職面試 (Interview)', prompt: "你是一位嚴格但專業的面試官。請針對用戶的應徵職位（假設為行政人員）進行提問。一次問一題。" },
-  { id: 'exam', title: '口語考試 (Oral Exam)', prompt: "你是一位口語考試的主考官。請提出一個社會議題（如：環保、科技發展），引導考生發表意見，並進行追問。" },
-  { id: 'business', title: '商業談判 (Business)', prompt: "你是合作夥伴公司的代表。用戶需要向你推銷一個新方案。請提出質疑並要求對方解釋細節。" },
-  { id: 'custom', title: '自訂場景', prompt: "" },
+  { id: 'interview', title: 'Job Interview', prompt: "You are a friendly but professional hiring manager interviewing a candidate. Ask one question at a time. Correct them gently if they make major mistakes." },
+  { id: 'coffee', title: 'Ordering Coffee', prompt: "You are a barista at a busy cafe. The user is a customer. Ask for their order, size, and name. Keep it casual." },
+  { id: 'casual', title: 'Casual Chat', prompt: "You are a friend meeting for lunch. Ask the user how their week has been. Keep the conversation flowing naturally." },
+  { id: 'custom', title: 'Custom Scenario', prompt: "" },
 ];
 
 interface Message {
@@ -21,94 +21,233 @@ interface OralCoachProps {
   aiProvider: AiProvider;
 }
 
+// Helper for Speech Recognition types
+declare global {
+  interface Window {
+    webkitSpeechRecognition: any;
+  }
+}
+
 export const OralCoach: React.FC<OralCoachProps> = ({ aiProvider }) => {
   const [activeScenario, setActiveScenario] = useState(SCENARIOS[0]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Custom Scenario State
   const [customTopic, setCustomTopic] = useState('');
   const [customSessionStarted, setCustomSessionStarted] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
   const chatSessionRef = useRef<ChatSession | null>(null);
 
   useEffect(() => {
-    if (activeScenario.id === 'custom' && !customSessionStarted) return;
+    if (activeScenario.id === 'custom' && !customSessionStarted) {
+      return;
+    }
 
     let prompt = activeScenario.prompt;
     let title = activeScenario.title;
 
     if (activeScenario.id === 'custom') {
-       prompt = `你是對話夥伴。用戶想練習：「${customTopic}」。請以此背景進行自然對話。`;
+       prompt = `You are a roleplay partner. The user wants to practice: "${customTopic}". Engage in a natural conversation in this context.`;
        title = customTopic;
     }
 
-    const systemPrompt = prompt + " 重要：如果用戶的語法不通順或用詞不當，請在回應最後用括號 (建議：...) 輕微修正。保持對話簡短。";
+    const systemPrompt = prompt + " IMPORTANT: If the user makes a grammar mistake, gently mention it in parenthesis at the end of your response, e.g. (Correction: ...). Keep your responses concise (under 40 words) to encourage back-and-forth conversation.";
+    
     chatSessionRef.current = createChatSession(aiProvider, systemPrompt);
-    setMessages([{ id: 'init', role: 'model', text: `(場景: ${title}) 你好，我們開始吧！` }]);
+
+    setMessages([{ 
+      id: 'init', 
+      role: 'model', 
+      text: `(Scenario: ${title} - ${aiProvider}) Hello! Ready to start?` 
+    }]);
   }, [activeScenario, aiProvider, customSessionStarted]); 
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim() || !chatSessionRef.current) return;
+
     const userMsg: Message = { id: Date.now().toString(), role: 'user', text: input };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
+
     try {
       const responseText = await chatSessionRef.current.sendMessage(userMsg.text);
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model', text: responseText }]);
-    } catch (error) { alert("發送失敗，請檢查網絡。"); } finally { setIsLoading(false); }
+      
+      const modelMsg: Message = { 
+        id: (Date.now() + 1).toString(), 
+        role: 'model', 
+        text: responseText 
+      };
+      setMessages(prev => [...prev, modelMsg]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      alert("Error sending message. Please check API settings.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleMic = () => {
-    if (!('webkitSpeechRecognition' in window)) { alert("請使用 Chrome 瀏覽器以支援語音功能。"); return; }
-    if (isListening) { setIsListening(false); return; }
-    const recognition = new (window as any).webkitSpeechRecognition();
-    recognition.continuous = false; 
-    recognition.lang = 'zh-HK'; // Default Cantonese
+    if (!('webkitSpeechRecognition' in window)) {
+      alert("Speech recognition is not supported in this browser. Please use Chrome.");
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
-    recognition.onresult = (event: any) => { setInput(prev => prev + (prev ? ' ' : '') + event.results[0][0].transcript); };
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(prev => prev + (prev ? ' ' : '') + transcript);
+    };
+
     recognition.start();
   };
 
-  const handleStartCustom = () => { if (!customTopic.trim()) return; setMessages([]); setCustomSessionStarted(true); };
+  const handleStartCustom = () => {
+    if (!customTopic.trim()) return;
+    setMessages([]);
+    setCustomSessionStarted(true);
+  };
+
   const handleScenarioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = SCENARIOS.find(s => s.id === e.target.value);
-    if (selected) { setActiveScenario(selected); setMessages([]); setCustomSessionStarted(false); }
+    if (selected) {
+      setActiveScenario(selected);
+      setMessages([]);
+      if (selected.id === 'custom') {
+        setCustomSessionStarted(false);
+      } else {
+        setCustomSessionStarted(false);
+      }
+    }
   };
+
+  const showCustomSetup = activeScenario.id === 'custom' && !customSessionStarted;
 
   return (
     <div className="max-w-4xl mx-auto md:p-8 h-[calc(100vh-80px)] md:h-screen flex flex-col space-y-4 bg-slate-900 rounded-none md:rounded-3xl">
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-4 md:p-0">
-        <div><h2 className="text-2xl font-bold text-white">口語教練</h2><p className="text-slate-300 text-sm">模擬面試與職場對話。</p></div>
-        <select value={activeScenario.id} onChange={handleScenarioChange} className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">{SCENARIOS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select>
+        <div>
+           <h2 className="text-2xl font-bold text-white">Oral Coach</h2>
+           <p className="text-slate-300 text-sm">Roleplay scenarios to prepare for exams.</p>
+        </div>
+        <select 
+          value={activeScenario.id}
+          onChange={handleScenarioChange}
+          className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 min-w-[200px]"
+        >
+          {SCENARIOS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+        </select>
        </div>
 
        <div className="flex-1 bg-slate-800 rounded-2xl shadow-xl border border-slate-700 overflow-hidden flex flex-col">
-          {activeScenario.id === 'custom' && !customSessionStarted ? (
+          
+          {showCustomSetup ? (
              <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-6 bg-slate-800">
-               <div className="w-16 h-16 bg-indigo-900 rounded-full flex items-center justify-center mb-2"><Sparkles className="w-8 h-8 text-indigo-300" /></div>
-               <input value={customTopic} onChange={(e) => setCustomTopic(e.target.value)} placeholder="例如：我要練習向老闆請假..." className="w-full max-w-md p-4 rounded-xl border border-slate-600 bg-slate-900 text-white" />
-               <button onClick={handleStartCustom} disabled={!customTopic.trim()} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2">開始對話 <ArrowRight className="w-5 h-5" /></button>
+               <div className="w-16 h-16 bg-indigo-900 rounded-full flex items-center justify-center mb-2">
+                 <Sparkles className="w-8 h-8 text-indigo-300" />
+               </div>
+               <div className="text-center max-w-md space-y-2">
+                 <h3 className="text-xl font-bold text-white">Create Custom Scenario</h3>
+                 <p className="text-slate-300">Describe who the AI should be and what you want to practice.</p>
+               </div>
+               
+               <div className="w-full max-w-md space-y-4">
+                 <textarea 
+                   value={customTopic}
+                   onChange={(e) => setCustomTopic(e.target.value)}
+                   placeholder="e.g. You are a strict immigration officer..."
+                   className="w-full p-4 rounded-xl border border-slate-600 bg-slate-900 text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-32"
+                 />
+                 <button 
+                   onClick={handleStartCustom}
+                   disabled={!customTopic.trim()}
+                   className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                 >
+                   Start Roleplay <ArrowRight className="w-5 h-5" />
+                 </button>
+               </div>
              </div>
           ) : (
             <>
+              {/* Chat Area */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/40">
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] p-4 rounded-2xl text-sm md:text-base leading-relaxed ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-700 text-white rounded-tl-none'}`}>{msg.text}</div>
+                    <div 
+                      className={`max-w-[80%] p-4 rounded-2xl text-sm md:text-base leading-relaxed ${
+                        msg.role === 'user' 
+                          ? 'bg-indigo-600 text-white rounded-tr-none shadow-md' 
+                          : 'bg-slate-700 text-white border border-slate-600 rounded-tl-none shadow-sm'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
                   </div>
                 ))}
-                {isLoading && <div className="text-slate-500 text-xs p-4">思考中...</div>}
+                {isLoading && (
+                   <div className="flex justify-start">
+                     <div className="bg-slate-700 px-4 py-2 rounded-full flex items-center gap-2">
+                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" />
+                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-75" />
+                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-150" />
+                     </div>
+                   </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
-              <div className="p-4 bg-slate-800 border-t border-slate-700 flex items-center gap-2">
-                 <button onClick={toggleMic} className={`p-3 rounded-full ${isListening ? 'bg-red-900 text-red-100 animate-pulse' : 'bg-slate-700 text-slate-100'}`}>{isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}</button>
-                 <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="輸入回應..." className="w-full p-3 rounded-full border border-slate-600 bg-slate-900 text-white" />
-                 <button onClick={handleSend} disabled={!input.trim() || isLoading} className="p-3 bg-indigo-600 text-white rounded-full"><Send className="w-5 h-5" /></button>
+
+              {/* Input Area */}
+              <div className="p-4 bg-slate-800 border-t border-slate-700">
+                 <div className="flex items-center gap-2">
+                   <button 
+                      onClick={toggleMic}
+                      className={`p-3 rounded-full transition-all duration-200 ${
+                        isListening ? 'bg-red-900 text-red-100 animate-pulse ring-2 ring-red-500' : 'bg-slate-700 text-slate-100 hover:bg-slate-600'
+                      }`}
+                      title="Speak"
+                   >
+                     {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                   </button>
+                   
+                   <div className="flex-1 relative">
+                     <input 
+                        type="text" 
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        placeholder={isListening ? "Listening..." : "Type your response..."}
+                        className="w-full p-3 pl-4 pr-10 rounded-full border border-slate-600 bg-slate-900 text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none"
+                     />
+                   </div>
+
+                   <button 
+                      onClick={handleSend}
+                      disabled={!input.trim() || isLoading}
+                      className="p-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 transition-colors shadow-sm"
+                   >
+                     <Send className="w-5 h-5" />
+                   </button>
+                 </div>
               </div>
             </>
           )}
