@@ -5,21 +5,22 @@ export enum AppView {
   WRITING = 'WRITING',
   SPEAKING = 'SPEAKING',
   LIBRARY = 'LIBRARY',
-  QUIZ = 'QUIZ'
+  QUIZ = 'QUIZ',
+  CLASSICAL = 'CLASSICAL' // New View
 }
 
 export type AiProvider = 'gemini' | 'deepseek';
 
 export interface VocabularyItem {
-  word: string;
-  phonetic?: string;
-  definition: string;
-  chineseTranslation: string;
-  exampleSentence: string;
-  mnemonic: string; // Critical for memory retention
-  context: string;
-  tags?: string[]; // New: For categorization (e.g., Emotion, Verb)
-  image?: string; // New: Base64 image string for visual association
+  word: string; // 詞彙/成語
+  phonetic?: string; // 注音 或 拼音
+  definition: string; // 釋義
+  chineseTranslation: string; // Used as "English Meaning" or "Modern Explanation" in this context
+  exampleSentence: string; // 例句
+  mnemonic: string; // 記憶法 (拆字/聯想)
+  context: string; // 語境
+  tags?: string[]; 
+  image?: string; // New: Base64 image string for visual memory
 }
 
 export interface WritingEntry {
@@ -32,27 +33,22 @@ export interface WritingEntry {
   date: string;
 }
 
-export interface ChatMessage {
+export interface ClassicalEntry {
   id: string;
-  role: 'user' | 'model';
-  text: string;
-  feedback?: string; // Grammar/Style feedback on this specific message
-}
-
-export interface Scenario {
-  id: string;
-  title: string;
-  description: string;
-  initialPrompt: string;
+  originalText: string;
+  translation: string; // 白話文
+  origin: string; // 出處
+  usage: string; // 應用方式
+  date: string;
 }
 
 export const TOPICS = [
-  "Business Meetings",
-  "Daily Commute",
-  "Shopping & Groceries",
-  "Job Interview",
-  "Email Correspondence",
-  "Travel & Tourism",
-  "Health & Medical",
-  "Technology"
+  "DSE 指定文言範文 (HKDSE)",
+  "議論文寫作 (Argumentative)",
+  "成語與典故 (Idioms)",
+  "商業公文與書信 (Business)",
+  "求職面試 (Interview)",
+  "日常演講與口才 (Speech)",
+  "唐詩宋詞 (Poetry)",
+  "公務員綜合招聘試 (CRE)"
 ];
