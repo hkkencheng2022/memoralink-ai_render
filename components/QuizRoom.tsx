@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { VocabularyItem, AiProvider, WritingEntry } from '../types';
 import { analyzeWriting, createChatSession } from '../services/geminiService';
 import { storage } from '../services/storage';
+import { playTextToSpeech } from '../services/audioService';
 import { BrainCircuit, Loader2, CheckCircle2, Bookmark, ArrowRight, RefreshCw, AlertCircle, BookOpen, Check, Volume2, Mic, MicOff, Save } from 'lucide-react';
 
 interface QuizRoomProps {
@@ -75,12 +76,7 @@ export const QuizRoom: React.FC<QuizRoomProps> = ({ aiProvider }) => {
   };
 
   const handleSpeak = (text: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    }
+    playTextToSpeech(text);
   };
 
   const toggleMic = () => {

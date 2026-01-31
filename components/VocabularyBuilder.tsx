@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { TOPICS, VocabularyItem, AiProvider } from '../types';
 import { generateVocabularyByTopic, generateVocabularyFromList } from '../services/geminiService';
 import { storage } from '../services/storage';
+import { playTextToSpeech } from '../services/audioService';
 import { Loader2, Eye, EyeOff, BrainCircuit, Bookmark, Check, Volume2, Upload, Zap, RefreshCw } from 'lucide-react';
 
 interface VocabularyBuilderProps {
@@ -106,13 +107,7 @@ export const VocabularyBuilder: React.FC<VocabularyBuilderProps> = ({ aiProvider
 
   const handleSpeak = (text: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.8; 
-      window.speechSynthesis.cancel(); 
-      window.speechSynthesis.speak(utterance);
-    }
+    playTextToSpeech(text);
   };
 
   return (

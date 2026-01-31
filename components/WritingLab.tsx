@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { analyzeWriting } from '../services/geminiService';
 import { storage } from '../services/storage';
+import { playTextToSpeech } from '../services/audioService';
 import { Loader2, CheckCircle2, ArrowRight, PenTool, BookOpen, Bookmark, Check, Volume2, Save, AlertCircle } from 'lucide-react';
 import { AiProvider, VocabularyItem, WritingEntry } from '../types';
 
@@ -100,12 +101,7 @@ export const WritingLab: React.FC<WritingLabProps> = ({ aiProvider }) => {
   };
 
   const handleSpeak = (text: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    }
+    playTextToSpeech(text);
   };
 
   return (

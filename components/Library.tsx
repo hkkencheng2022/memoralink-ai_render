@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VocabularyItem, WritingEntry } from '../types';
 import { storage } from '../services/storage';
+import { playTextToSpeech } from '../services/audioService';
 import { Trash2, Eye, Search, Volume2, Download, ChevronDown, ChevronUp, Upload, FileJson, Edit3, X, Check, Image as ImageIcon, Maximize2, Loader2 } from 'lucide-react';
 
 type LibraryTab = 'vocabulary' | 'writing';
@@ -188,11 +189,7 @@ export const Library: React.FC = () => {
 
   const handleSpeak = (text: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if ('speechSynthesis' in window) {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang='en-US'; 
-      window.speechSynthesis.speak(u); 
-    }
+    playTextToSpeech(text);
   };
 
   // --- Focus Modal Content ---
