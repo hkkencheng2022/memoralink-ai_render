@@ -77,12 +77,19 @@ export const generateVocabulary = async (
   difficulty: string = 'Intermediate'
 ): Promise<VocabularyItem[]> => {
   const prompt = `Topic: ${topic}. Difficulty: ${difficulty}. 
-    The user has very poor memory. Provide ${count} words with unique, vivid, and funny stories (mnemonics) to help them remember.
-    Include Traditional Chinese translations (繁體中文), phonetics, and a 'tags' array (e.g., ["Emotion", "Verb", "Business"]) for each word. Return ONLY valid JSON.`;
-  
-  // Note: generateVocabulary currently hardcodes Gemini usage. 
-  // To use DeepSeek here too, we would need to pass the provider or default to one.
-  // For safety/schema support, keeping Gemini as default for this function unless called via generateVocabularyFromList/Topic logic.
+    Role: You are a Master Memory Coach who connects Pop Culture with Real-World News.
+    Task: Provide ${count} vocabulary words.
+    
+    For the "mnemonic" field of each word, act as a Creative Selector to create a vivid mental image.
+    Step 1: Choose the SINGLE BEST category for the word:
+    - Category A (Anime/Movies): Characters from Ghibli, One Piece, Marvel, etc.
+    - Category B (Stars/Icons): Singers, Historical Figures, or Celebrities.
+    - Category C (Anthropomorphic Animals): Animals acting like humans (e.g., a Wolf in a suit).
+    - Category D (AI Surrealism): A strange, dream-like combination of elements.
+    
+    Step 2: Write the "mnemonic" as a vivid, descriptive image generation prompt in English.
+    
+    Include translations (in the 'chineseTranslation' field), phonetics, and a 'tags' array (e.g., ["Emotion", "Verb", "Business"]) for each word. Return ONLY valid JSON.`;
   
   const ai = new GoogleGenAI({ apiKey: getApiKey('gemini') });
   const response = await ai.models.generateContent({
@@ -98,9 +105,9 @@ export const generateVocabulary = async (
             word: { type: Type.STRING },
             phonetic: { type: Type.STRING },
             definition: { type: Type.STRING },
-            chineseTranslation: { type: Type.STRING, description: "Traditional Chinese translation (繁體中文)" },
+            chineseTranslation: { type: Type.STRING, description: "Translation/Definition of the word" },
             exampleSentence: { type: Type.STRING },
-            mnemonic: { type: Type.STRING },
+            mnemonic: { type: Type.STRING, description: "Vivid image description in English" },
             context: { type: Type.STRING },
             tags: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
@@ -117,11 +124,19 @@ export const generateVocabularyFromList = async (
   words: string[],
   provider: AiProvider
 ): Promise<VocabularyItem[]> => {
-  const sys = `You are a vocabulary expert. Create memory aid cards for the provided words.
+  const sys = `You are a Master Memory Coach who connects Pop Culture with Real-World News.
+  For the "mnemonic" field of each word:
+  1. The Creative Selector (The Hook): Choose ONE category for a vivid image:
+     - Anime/Movies (Ghibli, Marvel, One Piece)
+     - Stars/Icons (Singers, Historical Figures)
+     - Anthropomorphic Animals (Animals in suits, etc.)
+     - AI Surrealism (Strange, dream-like)
+  2. Write the mnemonic as a descriptive image generation prompt in English that visualizes this scene.
+
   IMPORTANT: You must return a valid JSON array of objects. 
-  Each object MUST contain strictly these keys: "word", "phonetic", "definition", "chineseTranslation" (Must be Traditional Chinese 繁體中文), "exampleSentence", "mnemonic", "context", "tags".`;
+  Each object MUST contain strictly these keys: "word", "phonetic", "definition", "chineseTranslation", "exampleSentence", "mnemonic", "context", "tags".`;
   
-  const prompt = `Create cards for: ${words.join(', ')}. Ensure the "exampleSentence" key is present for every word. Translate to Traditional Chinese (繁體中文).`;
+  const prompt = `Create cards for: ${words.join(', ')}. Ensure the "exampleSentence" key is present. Mnemonics must be in English.`;
 
   if (provider === 'deepseek') {
     const resText = await callDeepSeek(prompt, sys);
@@ -143,9 +158,9 @@ export const generateVocabularyFromList = async (
             word: { type: Type.STRING },
             phonetic: { type: Type.STRING },
             definition: { type: Type.STRING },
-            chineseTranslation: { type: Type.STRING, description: "Traditional Chinese translation (繁體中文)" },
+            chineseTranslation: { type: Type.STRING, description: "Translation/Definition of the word" },
             exampleSentence: { type: Type.STRING },
-            mnemonic: { type: Type.STRING },
+            mnemonic: { type: Type.STRING, description: "Vivid image description in English" },
             context: { type: Type.STRING },
             tags: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
@@ -164,20 +179,30 @@ export const generateVocabularyByTopic = async (
   difficulty: string,
   provider: AiProvider
 ): Promise<VocabularyItem[]> => {
-  const sys = `Topic: ${topic}. Difficulty: ${difficulty}. You are a helpful vocabulary teacher.
+  const sys = `Topic: ${topic}. Difficulty: ${difficulty}. 
+  Role: You are a Master Memory Coach who connects Pop Culture with Real-World News.
   Task: Provide ${count} words. 
+  
+  For the "mnemonic" field:
+  Step 1: The Creative Selector. Choose the SINGLE BEST category to create a vivid mental image:
+  - Category A (Anime/Movies): Characters from Ghibli, One Piece, Marvel, etc.
+  - Category B (Stars/Icons): Singers, Historical Figures, or Celebrities.
+  - Category C (Anthropomorphic Animals): Animals acting like humans.
+  - Category D (AI Surrealism): A strange, dream-like combination of elements.
+  Step 2: Write the mnemonic as a vivid, descriptive image generation prompt in English that visualizes this scene.
+
   Output Format: Return ONLY a raw JSON array of objects.
   Required Keys for each object:
-  - "word": The vocabulary word (English).
+  - "word": The vocabulary word.
   - "phonetic": IPA pronunciation.
   - "definition": English definition.
-  - "chineseTranslation": Traditional Chinese translation (繁體中文).
-  - "exampleSentence": A clear sentence using the word in context (English).
-  - "mnemonic": A vivid, funny, or weird story to help remember the word (Traditional Chinese).
+  - "chineseTranslation": Translation/Definition of the word.
+  - "exampleSentence": A clear sentence using the word in context.
+  - "mnemonic": The vivid visual story from Step 2 (in English).
   - "context": Brief usage context (e.g., Formal, Slang).
-  - "tags": Array of related keywords (e.g., ["Business", "Verb"]).`;
+  - "tags": Array of related keywords.`;
 
-  const prompt = `Generate ${count} vocabulary cards for topic '${topic}'. Ensure exact JSON keys including "exampleSentence". All Chinese must be Traditional (繁體中文).`;
+  const prompt = `Generate ${count} vocabulary cards for topic '${topic}'. Ensure exact JSON keys including "exampleSentence". Mnemonics must be in English.`;
 
   if (provider === 'deepseek') {
     const resText = await callDeepSeek(prompt, sys);
@@ -193,26 +218,30 @@ export const analyzeWriting = async (
   context: string,
   provider: AiProvider
 ): Promise<any> => {
-  const sys = `You are an expert English writing coach.
+  const sys = `You are an expert English writing coach and Master Memory Coach.
   Task: 
   1. Correct grammar (Return in English).
   2. Suggest a native English speaker version (Return in English).
-  3. Provide a detailed explanation of errors and improvements in Traditional Chinese (繁體中文).
+  3. Provide a detailed explanation of errors and improvements in English.
   4. Suggest 2-3 key vocabulary words with mnemonics.
+
+  For the vocabulary mnemonics, use the "Master Memory Coach" strategy:
+  - Connect the word to Pop Culture (Anime/Movies), Stars/Icons, Anthropomorphic Animals, or AI Surrealism.
+  - Write the mnemonic as a vivid visual description in English.
 
   IMPORTANT: Return the response strictly as a valid JSON object.
   JSON Schema Structure:
   {
     "correction": "The corrected text in English",
     "improvedVersion": "The native-sounding version in English",
-    "explanation": "Detailed explanation in Traditional Chinese (繁體中文)",
+    "explanation": "Detailed explanation in English",
     "keyVocabulary": [
       {
         "word": "English word",
         "definition": "English definition",
-        "mnemonic": "Memory aid in Traditional Chinese",
+        "mnemonic": "Visual scene description in English",
         "phonetic": "IPA",
-        "chineseTranslation": "Traditional Chinese translation",
+        "chineseTranslation": "Translation/Definition",
         "exampleSentence": "English example sentence",
         "tags": ["Tag1", "Tag2"]
       }
@@ -237,7 +266,7 @@ export const analyzeWriting = async (
         type: Type.OBJECT,
         properties: {
           correction: { type: Type.STRING, description: "Corrected text in English" },
-          explanation: { type: Type.STRING, description: "Explanation in Traditional Chinese" },
+          explanation: { type: Type.STRING, description: "Explanation in English" },
           improvedVersion: { type: Type.STRING, description: "Native speaker version in English" },
           keyVocabulary: {
             type: Type.ARRAY,
@@ -248,7 +277,7 @@ export const analyzeWriting = async (
                 definition: { type: Type.STRING },
                 mnemonic: { type: Type.STRING },
                 phonetic: { type: Type.STRING },
-                chineseTranslation: { type: Type.STRING, description: "Traditional Chinese translation (繁體中文)" },
+                chineseTranslation: { type: Type.STRING, description: "Translation/Definition" },
                 exampleSentence: { type: Type.STRING },
                 tags: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
@@ -267,7 +296,8 @@ export interface ChatSession {
 }
 
 export const createChatSession = (provider: AiProvider, systemInstruction: string): ChatSession => {
-  const enhancedSystemInstruction = systemInstruction + " Please ensure any Chinese text provided is in Traditional Chinese (繁體中文).";
+  // Removed strict Traditional Chinese instruction
+  const enhancedSystemInstruction = systemInstruction;
 
   if (provider === 'deepseek') {
     let history: {role: string, content: string}[] = [];
